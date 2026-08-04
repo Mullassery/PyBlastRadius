@@ -5,6 +5,20 @@
 
 ---
 
+
+## Real Use Cases
+
+This library is used for:
+- See examples below
+- Check GitHub issues for real-world usage
+
+## Get Started
+
+```python
+# Quick example - copy and run
+# See full docs for detailed usage
+```
+
 ## 📋 Current Status
 
 **Phase**: Research & Planning (Aug 2026)  
