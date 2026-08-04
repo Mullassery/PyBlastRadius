@@ -292,3 +292,9 @@ Apache 2.0 (Open-source from day 1)
 
 **Last Updated**: August 3, 2026  
 **Status**: Research & Planning Phase
+
+## License
+
+Proprietary License — Free to use with explicit attribution
+
+See [LICENSE](LICENSE) for full terms.
