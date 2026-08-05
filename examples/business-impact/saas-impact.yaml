@@ -1,0 +1,209 @@
+# Business Impact Configuration Example
+# Maps technical failures to business outcomes and financial impact
+# v0.2+ feature - Planned for MVP extension
+
+business_impact_mappings:
+  database_outage:
+    technical_failure: "PostgreSQL database unavailable"
+    business_impact: "All checkout operations fail, no order processing"
+    affected_metrics:
+      - metric: "orders_per_minute"
+        baseline: 100
+        during_failure: 0
+        impact_pct: -100
+      - metric: "revenue_per_minute"
+        baseline: 500
+        during_failure: 0
+        impact_pct: -100
+    financial_impact: "$500/min revenue loss"
+    sla_impacted:
+      - "99.9% uptime SLA"
+      - "Payment processing SLA"
+    customer_impact: "Unable to place orders"
+    recovery_plan: "Database failover (5 min) + connection pool reset (2 min)"
+
+  payment_service_degradation:
+    technical_failure: "Payment service elevated latency (>5s)"
+    business_impact: "Slow checkout, increased cart abandonment"
+    affected_metrics:
+      - metric: "checkout_success_rate"
+        baseline: 98
+        during_failure: 85
+        impact_pct: -13
+      - metric: "revenue_per_minute"
+        baseline: 500
+        during_failure: 400
+        impact_pct: -20
+    financial_impact: "$100/min revenue loss"
+    customer_impact: "Slow payment processing, increased timeouts"
+    recovery_plan: "Scale payment service (+10 replicas) or circuit break to fallback"
+
+  redis_cache_failure:
+    technical_failure: "Redis cache cluster unavailable"
+    business_impact: "Session loss, user re-authentication required, slower pages"
+    affected_metrics:
+      - metric: "active_sessions"
+        baseline: 50000
+        during_failure: 0
+        impact_pct: -100
+      - metric: "page_load_time_ms"
+        baseline: 200
+        during_failure: 800
+        impact_pct: 300
+    financial_impact: "$50/min revenue loss + brand damage"
+    customer_impact: "Users logged out, slow experience"
+    recovery_plan: "Restart Redis cluster (3 min) or switch to in-process cache"
+
+  auth_service_outage:
+    technical_failure: "Authentication service unable to validate tokens"
+    business_impact: "No users can login or perform authenticated actions"
+    affected_metrics:
+      - metric: "login_requests"
+        baseline: 1000
+        during_failure: 0
+        impact_pct: -100
+      - metric: "authenticated_users"
+        baseline: 25000
+        during_failure: 25000  # Existing users still active
+        impact_pct: 0
+    financial_impact: "$300/min new signup loss"
+    customer_impact: "Cannot login, severe UX impact"
+    recovery_plan: "Auth service restart (2 min) + token cache check"
+
+  kafka_broker_failure:
+    technical_failure: "Kafka message queue broker down"
+    business_impact: "Analytics pipeline delayed, real-time features affected"
+    affected_metrics:
+      - metric: "event_ingestion_lag"
+        baseline: "5 sec"
+        during_failure: "30+ min"
+        impact_pct: 999
+      - metric: "analytics_accuracy"
+        baseline: 100
+        during_failure: 70  # Stale data
+        impact_pct: -30
+    financial_impact: "$0/min direct (delayed reporting), $50/hour decision delay"
+    customer_impact: "Analytics stale, real-time personalization offline"
+    recovery_plan: "Kafka failover (5 min) + event replay from buffer"
+
+  monitoring_outage:
+    technical_failure: "Monitoring/observability infrastructure down"
+    business_impact: "Blind to system health, slow incident detection"
+    affected_metrics:
+      - metric: "incident_detection_time"
+        baseline: 2  # minutes
+        during_failure: 30  # Must wait for customer complaints
+        impact_pct: 1400
+      - metric: "mttr"
+        baseline: 45  # minutes
+        during_failure: 120  # minutes
+        impact_pct: 167
+    financial_impact: "$200/min per undetected incident (MTTR increase)"
+    customer_impact: "Longer outages before team notices"
+    recovery_plan: "Restore monitoring stack (10 min) + manual health check"
+
+  data_pipeline_delay:
+    technical_failure: "dbt data pipeline fails, warehouse updates delayed 6+ hours"
+    business_impact: "Stale features feed into ML models, recommendation accuracy drops"
+    affected_metrics:
+      - metric: "feature_freshness_hours"
+        baseline: 1
+        during_failure: 6
+        impact_pct: 500
+      - metric: "recommendation_accuracy"
+        baseline: 92
+        during_failure: 78  # Stale features
+        impact_pct: -15
+      - metric: "revenue_per_recommendation"
+        baseline: 10
+        during_failure: 8.5
+        impact_pct: -15
+    financial_impact: "$200/hour recommendation revenue loss"
+    customer_impact: "Poor recommendations, reduced engagement"
+    recovery_plan: "Restart Airflow DAG + backfill warehouse tables (2-3 hours)"
+
+  vector_db_failure:
+    technical_failure: "Vector database (Pinecone/Weaviate) unavailable"
+    business_impact: "Semantic search broken, AI/LLM features degrade"
+    affected_metrics:
+      - metric: "search_quality"
+        baseline: 8.5  # out of 10
+        during_failure: 3  # Falls back to basic keyword search
+        impact_pct: -65
+      - metric: "search_usage"
+        baseline: 40  # % of searches use semantic
+        during_failure: 0
+        impact_pct: -100
+    financial_impact: "$150/hour feature revenue loss"
+    customer_impact: "Search results poor, less engagement with AI features"
+    recovery_plan: "Restore vector DB (5 min) + rebuild embeddings if corrupted (1 hour)"
+
+# SLA Definitions
+sla_definitions:
+  checkout_sla:
+    target_availability: 0.999  # 99.9%
+    critical_services:
+      - "api-gateway"
+      - "checkout-service"
+      - "payment-service"
+      - "postgres"
+    penalty_per_minute: "$1000"
+
+  authentication_sla:
+    target_availability: 0.995  # 99.5%
+    critical_services:
+      - "auth-service"
+      - "postgres"
+    penalty_per_minute: "$500"
+
+  analytics_sla:
+    target_availability: 0.99  # 99%
+    critical_services:
+      - "kafka"
+      - "dbt-pipeline"
+      - "data-warehouse"
+    penalty_per_minute: "$100"
+
+# Blast Radius to Business Impact
+impact_by_blast_radius:
+  critical:  # 90+ blast radius score
+    monthly_downtime_budget: "43 minutes"
+    allowed_incidents: 1
+    average_impact: "$215,000 per incident"
+
+  high:  # 70-89 blast radius score
+    monthly_downtime_budget: "4.3 hours"
+    allowed_incidents: 3
+    average_impact: "$45,000 per incident"
+
+  medium:  # 50-69 blast radius score
+    monthly_downtime_budget: "1.4 days"
+    allowed_incidents: 10
+    average_impact: "$10,000 per incident"
+
+  low:  # <50 blast radius score
+    monthly_downtime_budget: "unlimited"
+    allowed_incidents: "unlimited"
+    average_impact: "$1,000 per incident"
+
+# Custom Failure Scenarios (for simulation)
+failure_scenarios:
+  worst_case:
+    description: "Database + Cache both fail"
+    services:
+      - "postgres"
+      - "redis"
+    estimated_revenue_loss_per_hour: "$600,000"
+    estimated_detection_time_min: 5
+    estimated_recovery_time_min: 30
+
+  cascading_payment:
+    description: "Payment service fails → checkout fails → orders backup → data pipeline lag"
+    services:
+      - "payment-service"
+      - "checkout-service"
+      - "kafka"
+      - "dbt-pipeline"
+    estimated_revenue_loss_per_hour: "$400,000"
+    estimated_detection_time_min: 2
+    estimated_recovery_time_min: 45

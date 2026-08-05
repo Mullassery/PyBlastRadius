@@ -1,0 +1,376 @@
+---
+# Example Kubernetes manifests for dependency discovery
+# Run: pyblastradius scan --kubernetes .
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+---
+# API Gateway Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: production
+  labels:
+    app: api-gateway
+    tier: frontend
+spec:
+  type: LoadBalancer
+  selector:
+    app: api-gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: myregistry/api-gateway:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: AUTH_SERVICE_URL
+              value: "http://auth-service:80"
+            - name: DATABASE_URL
+              value: "postgresql://postgres:5432/production"
+---
+# Authentication Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: production
+  labels:
+    app: auth-service
+    tier: backend
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: production
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: myregistry/auth-service:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://postgres:5432/production"
+            - name: CACHE_URL
+              value: "redis://redis:6379"
+---
+# Checkout Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout-service
+  namespace: production
+  labels:
+    app: checkout-service
+    tier: backend
+spec:
+  selector:
+    app: checkout-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-service
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout-service
+  template:
+    metadata:
+      labels:
+        app: checkout-service
+    spec:
+      containers:
+        - name: checkout-service
+          image: myregistry/checkout-service:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: AUTH_SERVICE_URL
+              value: "http://auth-service:80"
+            - name: PAYMENT_SERVICE_URL
+              value: "http://payment-service:80"
+            - name: DATABASE_URL
+              value: "postgresql://postgres:5432/production"
+            - name: KAFKA_BROKERS
+              value: "kafka:9092"
+---
+# Payment Processor Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+  namespace: production
+  labels:
+    app: payment-service
+    tier: backend
+    criticality: "critical"
+spec:
+  selector:
+    app: payment-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: production
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+        - name: payment-service
+          image: myregistry/payment-service:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://postgres:5432/production"
+            - name: STRIPE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-secrets
+                  key: api-key
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: production
+  labels:
+    app: postgres
+    tier: database
+    criticality: "critical"
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: production
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: production
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "production"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: password
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+---
+# Redis Cache
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: production
+  labels:
+    app: redis
+    tier: cache
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+# Kafka Broker (example)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: production
+  labels:
+    app: kafka
+    tier: messaging
+spec:
+  selector:
+    app: kafka
+  ports:
+    - name: broker
+      port: 9092
+      targetPort: 9092
+---
+# Network Policy - Restrict traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: restrict-egress
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: auth-service
+    - to:
+        - podSelector:
+            matchLabels:
+              app: checkout-service
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+---
+# ConfigMap for discovery
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-discovery
+  namespace: production
+data:
+  services.json: |
+    {
+      "services": [
+        {
+          "name": "api-gateway",
+          "dependencies": ["auth-service", "checkout-service"],
+          "criticality": 0.9,
+          "owner": "platform-team"
+        },
+        {
+          "name": "auth-service",
+          "dependencies": ["postgres", "redis"],
+          "criticality": 0.95,
+          "owner": "security-team"
+        },
+        {
+          "name": "payment-service",
+          "dependencies": ["postgres"],
+          "criticality": 1.0,
+          "owner": "payments-team"
+        }
+      ]
+    }
