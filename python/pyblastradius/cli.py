@@ -357,6 +357,29 @@ def generate_interactive_html(graph: Graph) -> str:
 </html>"""
 
 
+@cli.command()
+@click.option("--host", "-h", default="127.0.0.1", help="Server host")
+@click.option("--port", "-p", default=8080, type=int, help="Server port")
+def server(host: str, port: int):
+    """Start REST API server"""
+    try:
+        from pyblastradius.server import run_server
+        console.print(f"🚀 Starting PyBlastRadius server...")
+        console.print(f"📡 Listening on {host}:{port}")
+        console.print(f"📚 API docs: http://{host}:{port}/docs")
+        run_server(host, port)
+    except ImportError:
+        console.print(
+            "❌ FastAPI is required for REST API. Install with:\n"
+            "   pip install fastapi uvicorn",
+            style="red"
+        )
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"❌ Error: {str(e)}", style="red")
+        sys.exit(1)
+
+
 def main():
     """Entry point"""
     cli()
