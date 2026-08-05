@@ -1,0 +1,46 @@
+version: 1
+
+# Complete configuration with all sources
+discovery:
+  sources:
+    - type: kubernetes
+      kubeconfig: ~/.kube/config
+      namespaces: [default, production]
+      required: true
+
+    - type: terraform
+      path: ./infrastructure
+      backend: local
+      required: true
+
+    - type: otlp
+      endpoint: localhost:4317
+      duration: 5m
+      required: false
+
+    - type: airflow
+      host: localhost
+      port: 8080
+      required: false
+
+analysis:
+  max-depth: 5
+  include-transitive: true
+
+outputs:
+  - type: json
+    path: blast-radius.json
+  - type: html
+    path: blast-radius.html
+
+alerts:
+  - condition: "blast_radius_score > 0.8"
+    actions:
+      - type: slack
+        webhook-url: ${SLACK_WEBHOOK}
+  - condition: "blast_radius_score > 0.9"
+    actions:
+      - type: slack
+        webhook-url: ${SLACK_WEBHOOK}
+      - type: pagerduty
+        integration-key: ${PAGERDUTY_KEY}

@@ -61,6 +61,24 @@ docs = [
 [project.scripts]
 pyblastradius = "pyblastradius.cli:main"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "isort>=5.0",
+    "flake8>=6.0",
+    "mypy>=1.0",
+]
+docs = [
+    "sphinx>=6.0",
+    "sphinx-rtd-theme>=1.0",
+]
+cli = [
+    "click>=8.0",
+    "rich>=12.0",
+]
+
 [project.urls]
 Repository = "https://github.com/Mullassery/PyBlastRadius"
 Documentation = "https://github.com/Mullassery/PyBlastRadius/blob/main/docs/QUICK_START.md"

@@ -1,0 +1,60 @@
+name: Blast Radius Analysis
+
+on:
+  pull_request:
+    paths:
+      - 'infrastructure/**'
+      - 'k8s/**'
+      - '.github/workflows/example-blast-radius.yml'
+
+jobs:
+  analyze:
+    name: Analyze blast radius
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Blast Radius Analysis
+        id: blast
+        uses: Mullassery/pyblastradius-action@v1
+        with:
+          discovery-sources: |
+            kubernetes://
+            terraform://path=./infrastructure
+          max-depth: 5
+          failure-on-score: 0.8
+
+      - name: Comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const score = '${{ steps.blast.outputs.blast-radius-score }}';
+            const impacted = '${{ steps.blast.outputs.impacted-count }}';
+
+            let emoji = '🟢';
+            if (score > 0.5) emoji = '🟡';
+            if (score > 0.7) emoji = '🟠';
+            if (score > 0.8) emoji = '🔴';
+
+            const comment = `## ${emoji} Blast Radius Analysis
+
+            **Score**: ${score} (${(score * 100).toFixed(0)}%)
+            **Services Impacted**: ${impacted}
+
+            [View full analysis](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blast-radius-analysis
+          path: blast-radius.json

@@ -1,0 +1,133 @@
+name: 'Blast Radius Analysis'
+description: 'Analyze and report blast radius of infrastructure changes'
+author: 'Georgi Mammen Mullassery'
+
+inputs:
+  discovery-sources:
+    description: 'Discovery sources (one per line, e.g., kubernetes://, terraform://path=./infra)'
+    required: true
+  max-depth:
+    description: 'Maximum depth for blast radius analysis (1-20)'
+    required: false
+    default: '5'
+  failure-on-score:
+    description: 'Fail workflow if blast radius score exceeds this threshold (0-1)'
+    required: false
+    default: '0.9'
+
+outputs:
+  blast-radius-score:
+    description: 'Blast radius score (0-1)'
+    value: ${{ steps.analyze.outputs.score }}
+  analysis-json:
+    description: 'Path to analysis JSON file'
+    value: 'blast-radius.json'
+  impacted-count:
+    description: 'Number of services impacted'
+    value: ${{ steps.analyze.outputs.impacted }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install PyBlastRadius
+      shell: bash
+      run: pip install pyblastradius click rich pyyaml
+
+    - name: Run discovery and analysis
+      id: analyze
+      shell: bash
+      env:
+        DISCOVERY_SOURCES: ${{ inputs.discovery-sources }}
+        MAX_DEPTH: ${{ inputs.max-depth }}
+        FAILURE_THRESHOLD: ${{ inputs.failure-on-score }}
+      run: |
+        # Parse sources and run scan
+        python -c "
+        from pyblastradius.cli import cli, UriParser
+        from pyblastradius import Graph
+        import json
+        import sys
+        import os
+
+        sources = os.environ.get('DISCOVERY_SOURCES', '').strip().split('\n')
+        sources = [s.strip() for s in sources if s.strip()]
+
+        graph = Graph()
+        for source_uri in sources:
+            try:
+                scheme, params = UriParser.parse(source_uri)
+                discoverer = UriParser.create_discoverer(scheme, params)
+                sub_graph = discoverer.discover()
+                graph = Graph.merge([graph, sub_graph])
+            except Exception as e:
+                print(f'Warning: Failed to discover from {source_uri}: {e}')
+
+        # Save graph
+        with open('blast-radius.json', 'w') as f:
+            f.write(graph.to_json())
+        print(f'Discovered {graph.node_count()} nodes')
+        "
+
+    - name: Analyze blast radius
+      id: pr_comment
+      shell: bash
+      run: |
+        python -c "
+        from pyblastradius import Graph, BlastRadiusAnalyzer
+        import json
+
+        with open('blast-radius.json') as f:
+            graph = Graph.from_json(f.read())
+
+        # Analyze each service and find highest score
+        analyzer = BlastRadiusAnalyzer(graph)
+        max_score = 0
+        max_service = None
+
+        for service in graph.services():
+            result = analyzer.analyze(service)
+            if result.score > max_score:
+                max_score = result.score
+                max_service = service
+
+        print(f'::set-output name=score::{max_score:.2f}')
+        print(f'::set-output name=impacted::{len(graph.services()) - 1}')
+
+        # Save result
+        with open('analysis-result.json', 'w') as f:
+            json.dump({
+                'max_score': max_score,
+                'max_service': max_service,
+                'services_count': len(graph.services())
+            }, f)
+        "
+
+    - name: Check failure threshold
+      shell: bash
+      env:
+        THRESHOLD: ${{ inputs.failure-on-score }}
+      run: |
+        python -c "
+        import json
+        import os
+
+        with open('analysis-result.json') as f:
+            result = json.load(f)
+
+        threshold = float(os.environ.get('THRESHOLD', '0.9'))
+        score = result['max_score']
+
+        print(f'Blast radius score: {score:.1%}')
+        print(f'Failure threshold: {threshold:.1%}')
+
+        if score > threshold:
+            print(f'FAILED: Score exceeds threshold')
+            exit(1)
+        else:
+            print(f'PASSED: Score within acceptable range')
+        "
