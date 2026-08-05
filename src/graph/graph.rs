@@ -203,6 +203,44 @@ impl Graph {
         f(&mut node.properties);
         Ok(())
     }
+
+    pub fn merge(&mut self, other: &Graph) -> Result<()> {
+        // Keep a map of old node IDs to merged node IDs for edge remapping
+        let mut node_mapping: HashMap<NodeId, NodeId> = HashMap::new();
+
+        // Build a name→id index for existing nodes
+        let self_name_index: HashMap<String, NodeId> = self.nodes()
+            .map(|n| (n.name.clone(), n.id))
+            .collect();
+
+        // Merge nodes: dedupe by name, keeping the first occurrence
+        for other_node in other.nodes() {
+            if let Some(&existing_id) = self_name_index.get(&other_node.name) {
+                // Node with this name already exists, map to existing
+                node_mapping.insert(other_node.id, existing_id);
+            } else {
+                // New node, add it
+                let merged_id = other_node.id;
+                self.add_node(other_node.clone())?;
+                node_mapping.insert(other_node.id, merged_id);
+            }
+        }
+
+        // Merge edges: remap source/target to merged node IDs
+        for other_edge in other.edges() {
+            if let (Some(&new_source), Some(&new_target)) = (
+                node_mapping.get(&other_edge.source),
+                node_mapping.get(&other_edge.target),
+            ) {
+                let mut merged_edge = other_edge.clone();
+                merged_edge.source = new_source;
+                merged_edge.target = new_target;
+                let _ = self.add_edge(merged_edge); // Silently ignore duplicate edges
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for Graph {

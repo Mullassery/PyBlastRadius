@@ -40,7 +40,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "serde>=1.0",
     "click>=8.0",
 ]
 

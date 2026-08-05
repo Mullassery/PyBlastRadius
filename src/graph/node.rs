@@ -30,6 +30,8 @@ pub enum NodeType {
     Table,
     Cache,
     Queue,
+    Module,
+    Test,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

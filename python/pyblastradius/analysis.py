@@ -2,12 +2,9 @@
 
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
-from abc import ABC, abstractmethod
+from collections import defaultdict, deque
 
-try:
-    from pyblastradius._core import Graph
-except ImportError:
-    Graph = None
+from pyblastradius._core import PyGraph
 
 
 @dataclass
@@ -33,7 +30,7 @@ class BlastRadiusResult:
 class BlastRadiusAnalyzer:
     """Analyze blast radius (impact of service failure)"""
 
-    def __init__(self, graph: Graph):
+    def __init__(self, graph: PyGraph):
         self.graph = graph
 
     def analyze(self, service: str, max_depth: int = 3) -> BlastRadiusResult:
@@ -46,11 +43,11 @@ class BlastRadiusAnalyzer:
         directly_impacted = []
         indirectly_impacted = []
 
-        queue = [(service, 0)]
+        queue = deque([(service, 0)])
         visited.add(service)
 
         while queue:
-            current, depth = queue.pop(0)
+            current, depth = queue.popleft()
 
             if depth == 0:
                 pass  # This is the root service
@@ -60,14 +57,18 @@ class BlastRadiusAnalyzer:
                 indirectly_impacted.append(current)
 
             if depth < max_depth:
-                # Find dependent services (services that depend on current)
-                for edge in self.graph.edges():
-                    if edge.source == current and edge.target not in visited:
-                        visited.add(edge.target)
-                        queue.append((edge.target, depth + 1))
+                # Find services that depend on this one (get predecessors/incoming edges)
+                try:
+                    for pred in self.graph.get_neighbors(current):
+                        if pred not in visited:
+                            visited.add(pred)
+                            queue.append((pred, depth + 1))
+                except Exception:
+                    pass
 
         # Calculate blast radius score
-        total_services = len(self.graph.services())
+        total_services = len([n for n in self.graph.list_nodes()
+                            if self.graph.get_node_type(n) == "Service"])
         impacted_count = len(directly_impacted) + len(indirectly_impacted)
         score = impacted_count / max(total_services, 1)
 
@@ -83,7 +84,7 @@ class BlastRadiusAnalyzer:
 class CriticalityScorer:
     """Score services by criticality (how many others depend on them)"""
 
-    def __init__(self, graph: Graph):
+    def __init__(self, graph: PyGraph):
         self.graph = graph
 
     def score(self, service: str) -> float:
@@ -91,93 +92,58 @@ class CriticalityScorer:
         if not self.graph:
             raise ValueError("Graph is not initialized")
 
-        # Count dependencies
-        dependents = 0
-        for edge in self.graph.edges():
-            if edge.target == service:
-                dependents += 1
+        # Count how many things depend on this service (predecessors)
+        try:
+            dependents = len(self.graph.get_predecessors(service))
+        except Exception:
+            dependents = 0
 
-        total_edges = len(list(self.graph.edges()))
-        score = dependents / max(total_edges, 1)
-
-        return min(score, 1.0)
+        total_nodes = self.graph.node_count()
+        criticality = dependents / max(total_nodes, 1)
+        return min(1.0, criticality)
 
     def score_all(self) -> Dict[str, float]:
-        """Score all services"""
+        """Score all services by criticality"""
         scores = {}
-        for service in self.graph.services():
-            scores[service] = self.score(service)
+        for node in self.graph.list_nodes():
+            try:
+                if self.graph.get_node_type(node) == "Service":
+                    scores[node] = self.score(node)
+            except Exception:
+                pass
         return scores
 
 
 class Simulator:
-    """Simulate failure scenarios and cascade effects"""
+    """Simulate cascading failures"""
 
-    def __init__(self, graph: Graph):
+    def __init__(self, graph: PyGraph):
         self.graph = graph
 
-    def simulate_cascade(self, target: str, max_depth: int = 10) -> Dict[str, Any]:
-        """Simulate cascade failure"""
-        impacted = set([target])
-        queue = [target]
-        depth_map = {target: 0}
+    def simulate_cascade(self, root_service: str, max_depth: int = 5) -> Dict[str, Any]:
+        """Simulate cascading failure from a service"""
+        if not self.graph:
+            raise ValueError("Graph is not initialized")
+
+        # BFS to find all impacted services
+        visited = set()
+        queue = deque([root_service])
+        visited.add(root_service)
+        impacted = [root_service]
 
         while queue:
-            current = queue.pop(0)
-            current_depth = depth_map[current]
-
-            if current_depth < max_depth:
-                for edge in self.graph.edges():
-                    if edge.source == current and edge.target not in impacted:
-                        impacted.add(edge.target)
-                        depth_map[edge.target] = current_depth + 1
-                        queue.append(edge.target)
+            current = queue.popleft()
+            try:
+                for neighbor in self.graph.get_neighbors(current):
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        impacted.append(neighbor)
+                        queue.append(neighbor)
+            except Exception:
+                pass
 
         return {
-            "target": target,
-            "impacted_count": len(impacted) - 1,
-            "impacted_services": list(impacted - {target}),
-            "recovery_time_min": 30,
-            "recovery_time_max": 120,
+            "root": root_service,
+            "impacted_count": len(impacted),
+            "impacted": impacted,
         }
-
-
-class AnomalyDetector:
-    """Detect anomalies in service behavior"""
-
-    def __init__(self, graph: Graph):
-        self.graph = graph
-
-    def detect(self, service: str) -> List[Dict[str, Any]]:
-        """Detect anomalies for a service"""
-        # Placeholder: would integrate with metrics/traces
-        return []
-
-    def detect_all(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Detect anomalies for all services"""
-        anomalies = {}
-        for service in self.graph.services():
-            anomalies[service] = self.detect(service)
-        return anomalies
-
-
-class HiddenDependencyDetector:
-    """Detect undocumented dependencies"""
-
-    def __init__(self, graph: Graph):
-        self.graph = graph
-
-    def detect(self) -> List[Dict[str, Any]]:
-        """Detect hidden dependencies"""
-        # Placeholder: would scan logs, configs, etc.
-        return []
-
-
-__all__ = [
-    "BlastRadiusResult",
-    "BlastRadiusAnalyzer",
-    "CriticalityScorer",
-    "Simulator",
-    "AnomalyDetector",
-    "HiddenDependencyDetector",
-]

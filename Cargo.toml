@@ -15,6 +15,7 @@ categories = ["development-tools", "command-line-utilities"]
 [lib]
 name = "pyblastradius"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Graph & data structures

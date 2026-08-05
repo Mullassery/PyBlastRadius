@@ -9,6 +9,7 @@ pub mod utils;
 pub mod error;
 pub mod api;
 pub mod integrations;
+pub mod python_bindings;
 
 pub use graph::{Graph, Node, Edge, NodeType, EdgeType};
 pub use analysis::{BlastRadius, BlastRadiusAnalyzer, CriticalityScorer, Simulator, FailureType};

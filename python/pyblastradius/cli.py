@@ -14,11 +14,13 @@ from . import (
     TerraformDiscoverer,
     AirflowDiscoverer,
     OtelDiscoverer,
+    LocalDiscoverer,
     BlastRadiusAnalyzer,
     CriticalityScorer,
-    Graph,
 )
 from .discovery import Discoverer
+from .trees import build_tree, TreeType, render_json
+from pyblastradius._core import PyGraph
 
 console = Console()
 
@@ -70,43 +72,11 @@ class UriParser:
             )
         elif scheme == "local":
             return LocalDiscoverer(
-                path=params.get("path", "."),
-                recursive=params.get("recursive", "true").lower() == "true",
+                root_path=params.get("path", "."),
+                namespace_prefix=params.get("namespace"),
             )
         else:
             raise ValueError(f"Unknown discovery scheme: {scheme}")
-
-
-class LocalDiscoverer(Discoverer):
-    """Discover from local filesystem"""
-
-    def __init__(self, path: str = ".", recursive: bool = True):
-        self.path = Path(path)
-        self.recursive = recursive
-
-    def discover(self) -> Graph:
-        """Auto-discover dependencies in local directory"""
-        graph = Graph()
-
-        # Try each discoverer
-        discoverers = [
-            ("Kubernetes", KubernetesDiscoverer()),
-            ("Terraform", TerraformDiscoverer(path=str(self.path))),
-            ("Airflow", AirflowDiscoverer()),
-        ]
-
-        found_any = False
-        for name, discoverer in discoverers:
-            try:
-                sub_graph = discoverer.discover()
-                if sub_graph.node_count() > 0:
-                    graph = Graph.merge([graph, sub_graph])
-                    found_any = True
-                    console.print(f"  ✓ {name}: {sub_graph.node_count()} nodes")
-            except Exception as e:
-                console.print(f"  ✗ {name}: {str(e)}", style="dim")
-
-        return graph
 
 
 @click.group()
@@ -159,6 +129,78 @@ def scan(sources: tuple, output: str, verbose: bool):
     except Exception as e:
         console.print(f"\n❌ Error: {str(e)}", style="red")
         if verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument("graph_file", type=click.Path(exists=True))
+@click.option("--type", "-t", required=True, type=click.Choice(["call", "reverse_call", "import", "database", "blast_radius"]),
+              help="Tree type")
+@click.option("--root", "-r", required=True, help="Root node name")
+@click.option("--max-depth", "-d", default=5, type=int, help="Max depth")
+@click.option("--format", "-f", default="json", type=click.Choice(["json", "rich"]))
+@click.option("--output", "-o", default=None, help="Output file (default: stdout)")
+def tree(graph_file: str, type: str, root: str, max_depth: int, format: str, output: Optional[str]):
+    """Build and render dependency trees"""
+    try:
+        # Load graph from JSON file
+        with open(graph_file) as f:
+            graph_data = json.load(f)
+
+        # Create a PyGraph and populate it
+        graph = PyGraph()
+        for node_data in graph_data.get("nodes", []):
+            graph.add_node(node_data["name"], node_data.get("type", "Service"))
+
+        for edge_data in graph_data.get("edges", []):
+            try:
+                graph.add_edge(edge_data["source"], edge_data["target"], edge_data.get("type", "Calls"))
+            except Exception:
+                pass  # Skip edges where source/target doesn't exist
+
+        # Build the tree
+        if type == "blast_radius":
+            from pyblastradius.trees import build_blast_radius_tree
+            tree_node = build_blast_radius_tree(graph, root, max_depth=max_depth)
+        else:
+            tree_type_map = {
+                "call": TreeType.CALL,
+                "reverse_call": TreeType.REVERSE_CALL,
+                "import": TreeType.IMPORT,
+                "database": TreeType.DATABASE,
+            }
+            tree_type = tree_type_map[type]
+            tree_node = build_tree(graph, tree_type, root, max_depth=max_depth)
+
+        if not tree_node:
+            console.print(f"❌ Root node '{root}' not found", style="red")
+            sys.exit(1)
+
+        # Render
+        if format == "json":
+            result = render_json(tree_node)
+            if output:
+                with open(output, "w") as f:
+                    f.write(result)
+                console.print(f"✅ Tree saved to: {output}")
+            else:
+                click.echo(result)
+        elif format == "rich":
+            from pyblastradius.render.rich_renderer import print_tree
+            if output:
+                # Save as JSON when output file specified
+                result = render_json(tree_node)
+                with open(output, "w") as f:
+                    f.write(result)
+                console.print(f"✅ Tree saved to: {output}")
+            else:
+                print_tree(tree_node, console)
+
+    except Exception as e:
+        console.print(f"❌ Error: {str(e)}", style="red")
+        if False:  # Set to True for debugging
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -329,11 +371,11 @@ def get_risk_level(score: float) -> str:
         return "🔴 Critical"
 
 
-def generate_interactive_html(graph: Graph) -> str:
+def generate_interactive_html(graph: PyGraph) -> str:
     """Generate interactive HTML visualization"""
     # Simple HTML with graph data
-    nodes = [{"id": node, "label": node} for node in graph.services()]
-    edges = [{"source": e.source, "target": e.target} for e in graph.edges()]
+    nodes = [{"id": node, "label": node} for node in graph.list_nodes()]
+    edges = []  # TODO: expose edges from PyGraph
 
     return f"""<!DOCTYPE html>
 <html>

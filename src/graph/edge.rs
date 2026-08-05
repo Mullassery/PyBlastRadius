@@ -29,6 +29,8 @@ pub enum EdgeType {
     Transforms,      // A transforms data from B (data pipeline)
     ExportsTo,       // A exports to B (reverse ETL)
     Retrieves,       // A retrieves from B (vector DB)
+    Imports,         // A imports B (code imports)
+    Tests,           // A tests B (test coverage)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
