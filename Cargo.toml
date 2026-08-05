@@ -1,0 +1,95 @@
+[package]
+name = "pyblastradius"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+description = "Operational Blast Radius Intelligence Platform - Predict cascading failures and quantify business impact"
+authors = ["Georgi Mammen Mullassery <mullassery@gmail.com>"]
+license = "Proprietary"
+repository = "https://github.com/Mullassery/PyBlastRadius"
+homepage = "https://github.com/Mullassery/PyBlastRadius"
+readme = "README.md"
+keywords = ["observability", "incident-response", "dependency-graph", "blast-radius", "sre"]
+categories = ["development-tools", "command-line-utilities"]
+
+[lib]
+name = "pyblastradius"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pyblastradius"
+path = "src/bin/cli.rs"
+
+[dependencies]
+# Graph & data structures
+petgraph = "0.6"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# CLI & args
+clap = { version = "4.4", features = ["derive", "cargo"] }
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+futures = "0.3"
+
+# Parsing & serialization
+regex = "1.10"
+lazy_static = "1.4"
+xml-rs = "0.8"
+toml = "0.8"
+
+# Logging & diagnostics
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+log = "0.4"
+env_logger = "0.11"
+
+# File I/O & config
+walkdir = "2.4"
+tempfile = "3.8"
+dirs = "5.0"
+
+# HTTP & networking (optional)
+reqwest = { version = "0.11", features = ["json", "stream"], optional = true }
+hyper = { version = "0.14", optional = true }
+tonic = { version = "0.10", optional = true }
+prost = { version = "0.12", optional = true }
+
+# Error handling
+backtrace = "0.3"
+
+# Utilities
+itertools = "0.12"
+dashmap = "5.5"
+once_cell = "1.19"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.4"
+mockito = "1.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.bench]
+opt-level = 3
+lto = true
+
+# Benchmarks (add later)
+
+[features]
+default = ["http-discovery", "otlp-traces"]
+http-discovery = ["reqwest", "hyper"]
+otlp-traces = ["tonic", "prost"]
+neo4j-backend = []
