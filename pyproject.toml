@@ -70,7 +70,6 @@ Homepage = "https://github.com/Mullassery/PyBlastRadius"
 [tool.maturin]
 python-source = "python"
 module-name = "pyblastradius._core"
-features = ["pyo3/extension-module"]
 
 [tool.black]
 line-length = 100
