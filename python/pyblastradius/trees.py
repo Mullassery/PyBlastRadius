@@ -27,6 +27,16 @@ TREE_EDGE_FILTERS: Dict[TreeType, Optional[Set[str]]] = {
     TreeType.TEST_COVERAGE: {"Tests"},
 }
 
+# Default direction for each tree type
+TREE_DEFAULT_DIRECTION: Dict[TreeType, str] = {
+    TreeType.CALL: "forward",
+    TreeType.REVERSE_CALL: "reverse",
+    TreeType.IMPORT: "forward",
+    TreeType.BLAST_RADIUS: "reverse",
+    TreeType.DATABASE: "forward",
+    TreeType.TEST_COVERAGE: "reverse",  # "what tests cover this module"
+}
+
 
 @dataclass
 class TreeNode:

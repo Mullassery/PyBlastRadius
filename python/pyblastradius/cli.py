@@ -136,12 +136,12 @@ def scan(sources: tuple, output: str, verbose: bool):
 
 @cli.command()
 @click.argument("graph_file", type=click.Path(exists=True))
-@click.option("--type", "-t", required=True, type=click.Choice(["call", "reverse_call", "import", "database", "blast_radius"]),
+@click.option("--type", "-t", required=True, type=click.Choice(["call", "reverse_call", "import", "database", "blast_radius", "test_coverage"]),
               help="Tree type")
 @click.option("--root", "-r", required=True, help="Root node name")
 @click.option("--max-depth", "-d", default=5, type=int, help="Max depth")
-@click.option("--format", "-f", default="json", type=click.Choice(["json", "rich"]))
-@click.option("--output", "-o", default=None, help="Output file (default: stdout)")
+@click.option("--format", "-f", default="json", type=click.Choice(["json", "rich", "html"]))
+@click.option("--output", "-o", default=None, help="Output file (default: stdout for json/rich)")
 def tree(graph_file: str, type: str, root: str, max_depth: int, format: str, output: Optional[str]):
     """Build and render dependency trees"""
     try:
@@ -170,6 +170,7 @@ def tree(graph_file: str, type: str, root: str, max_depth: int, format: str, out
                 "reverse_call": TreeType.REVERSE_CALL,
                 "import": TreeType.IMPORT,
                 "database": TreeType.DATABASE,
+                "test_coverage": TreeType.TEST_COVERAGE,
             }
             tree_type = tree_type_map[type]
             tree_node = build_tree(graph, tree_type, root, max_depth=max_depth)
@@ -197,6 +198,14 @@ def tree(graph_file: str, type: str, root: str, max_depth: int, format: str, out
                 console.print(f"✅ Tree saved to: {output}")
             else:
                 print_tree(tree_node, console)
+        elif format == "html":
+            from pyblastradius.render.html_renderer import render_html
+            html_output = render_html(tree_node, title=f"{type.title()} Tree: {root}")
+            output_file = output or "tree.html"
+            with open(output_file, "w") as f:
+                f.write(html_output)
+            console.print(f"✅ Interactive tree saved to: {output_file}")
+            console.print(f"📖 Open in browser: file://{Path(output_file).resolve()}")
 
     except Exception as e:
         console.print(f"❌ Error: {str(e)}", style="red")
