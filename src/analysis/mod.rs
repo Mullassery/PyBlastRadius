@@ -1,10 +1,14 @@
 pub mod blast_radius;
 pub mod criticality;
 pub mod simulator;
+pub mod hidden_dependencies;
+pub mod anomaly_detection;
 
 pub use blast_radius::{BlastRadius, BlastRadiusAnalyzer, BlastRadiusResult};
 pub use criticality::{CriticalityScorer, CriticalityScore};
 pub use simulator::{Simulator, SimulationResult, FailureType};
+pub use hidden_dependencies::{HiddenDependency, HiddenDependencyDetector, DependencyConfidenceScorer};
+pub use anomaly_detection::{AnomalyDetector, AnomalyType, DetectedAnomaly};
 
 #[cfg(test)]
 mod tests {
