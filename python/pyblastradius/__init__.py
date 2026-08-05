@@ -16,7 +16,7 @@ Quick start:
     print(f"Blast radius score: {result.blast_radius_score:.1f}/100")
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "Georgi Mammen Mullassery"
 __email__ = "mullassery@gmail.com"
 __license__ = "Proprietary License — Free to use with explicit attribution"
