@@ -25,31 +25,73 @@
 ### Installation
 
 ```bash
+# Basic installation
 pip install pyblastradius
+
+# With all dependencies
+pip install pyblastradius[all]
+
+# For CLI features only
+pip install pyblastradius[cli]
+
+# For REST API server
+pip install pyblastradius[server]
 ```
 
 ### CLI Usage
 
 ```bash
-# Discover dependencies from your infrastructure
+# Auto-discover dependencies in current directory
+pyblastradius scan
+
+# Explicit source discovery
 pyblastradius scan \
-  --kubernetes ~/.kube/config \
-  --terraform ./infrastructure \
-  --airflow ~/airflow/dags
+  kubernetes://kubeconfig=~/.kube/config \
+  terraform://path=./infrastructure
 
 # Analyze blast radius for a service
-pyblastradius analyze \
-  --graph graph.json \
-  --service payment-service
+pyblastradius analyze graph.json --service payment-service
 
 # Rank systems by criticality
-pyblastradius criticality --graph graph.json
+pyblastradius criticality graph.json --limit 10
+
+# Simulate failure cascade
+pyblastradius simulate graph.json --target postgres
 
 # Generate visualization
-pyblastradius graph --input graph.json --output graph.html
+pyblastradius visualize graph.json --output blast-radius.html
 
-# Simulate failure scenarios
-pyblastradius simulate --graph graph.json --service postgres
+# Start REST API server
+pyblastradius server --host 0.0.0.0 --port 8080
+```
+
+### Configuration File
+
+Create `blastradius.yml` in your project:
+
+```yaml
+version: 1
+
+discovery:
+  sources:
+    - type: kubernetes
+      kubeconfig: ~/.kube/config
+    - type: terraform
+      path: ./infrastructure
+
+analysis:
+  max-depth: 5
+
+outputs:
+  - type: json
+    path: blast-radius.json
+  - type: html
+    path: blast-radius.html
+```
+
+Then run:
+```bash
+pyblastradius analyze
 ```
 
 ### Python API
@@ -223,15 +265,18 @@ incident_id = pd.create_incident(
 
 ## Project Status
 
-| Phase | Release | Status | Timeline |
-|-------|---------|--------|----------|
-| Phase 0 | Research & Planning | ✅ Complete | Aug 2026 |
-| Phase 1 | Foundation (Graph + Analysis) | ✅ Complete | Aug 2026 |
-| Phase 2 | Discovery Engines | ✅ Complete | Aug 2026 |
-| Phase 3 | Advanced Analytics + API | ✅ Complete | Aug 2026 |
-| Phase 4 | OTel + StatGuardian + dbt | ✅ Complete | Aug 2026 |
-| v0.1 | Public MVP Release | ⏳ In Progress | Q4 2026 |
-| v1.0 | Enterprise Edition | 📋 Planned | Q1 2027 |
+| Phase | Release | Status | Delivered |
+|-------|---------|--------|-----------|
+| Phase 0 | Research & Planning | ✅ Complete | Architecture, personas, roadmap |
+| Phase 1 | Foundation (Graph + Analysis) | ✅ Complete | Core graph engine, algorithms |
+| Phase 2 | CLI Implementation | ✅ Complete | Full CLI with all commands |
+| Phase 3 | Config & YAML | ✅ Complete | blastradius.yml support |
+| Phase 4 | CI/CD Integration | ✅ Complete | GitHub Actions workflow |
+| Phase 5 | Examples & Documentation | ✅ Complete | Working examples, configs |
+| Phase 6 | REST API Server | ✅ Complete | FastAPI endpoints + OpenAPI |
+| v0.1.0 | Public MVP Release | 🚀 Ready | All 10 input methods working |
+| v0.2.0 | Enhanced Config | 📋 Planned | Q3 2026 |
+| v1.0.0 | Enterprise Edition | 📋 Planned | Q1 2027 |
 
 ## Contributing
 
