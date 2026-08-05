@@ -16,10 +16,6 @@ categories = ["development-tools", "command-line-utilities"]
 name = "pyblastradius"
 path = "src/lib.rs"
 
-[[bin]]
-name = "pyblastradius"
-path = "src/bin/cli.rs"
-
 [dependencies]
 # Graph & data structures
 petgraph = "0.6"
