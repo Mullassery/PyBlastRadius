@@ -11,9 +11,15 @@ pub mod api;
 pub mod integrations;
 
 pub use graph::{Graph, Node, Edge, NodeType, EdgeType};
+pub use graph::serialization::{GraphExporter, GraphImporter, ExportFormat};
 pub use analysis::{BlastRadius, BlastRadiusAnalyzer, CriticalityScorer, Simulator, FailureType};
 pub use models::{Service, Database, Pipeline, DiscoveryConfig};
 pub use error::{Error, Result};
+pub use discovery::kubernetes::KubernetesDiscoverer;
+pub use discovery::terraform::TerraformDiscoverer;
+pub use discovery::airflow::AirflowDiscoverer;
+#[cfg(feature = "otlp-traces")]
+pub use discovery::otlp::OtlpDiscoverer;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const NAME: &str = env!("CARGO_PKG_NAME");

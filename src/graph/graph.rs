@@ -194,6 +194,22 @@ impl Graph {
         self.petgraph.clear();
     }
 
+    /// Merges another graph's nodes and edges into this one, preserving
+    /// their original IDs. Used to combine results from multiple discovery
+    /// sources (Kubernetes, Terraform, Airflow, OTLP) into one graph; nodes
+    /// discovered independently by different sources are not deduplicated
+    /// (cross-source entity resolution isn't implemented — each source's
+    /// nodes stay distinct).
+    pub fn merge(&mut self, other: &Graph) -> Result<()> {
+        for node in other.nodes() {
+            self.add_node(node.clone())?;
+        }
+        for edge in other.edges() {
+            self.add_edge(edge.clone())?;
+        }
+        Ok(())
+    }
+
     pub fn update_node_properties<F>(&mut self, node_id: &NodeId, f: F) -> Result<()>
     where
         F: FnOnce(&mut NodeProperties),
@@ -249,5 +265,24 @@ mod tests {
 
         let neighbors = graph.get_neighbors(&n1).unwrap();
         assert_eq!(neighbors.len(), 2);
+    }
+
+    #[test]
+    fn test_merge_combines_nodes_and_edges_preserving_ids() {
+        use crate::graph::edge::Edge;
+
+        let mut source_graph = Graph::new();
+        let n1 = source_graph.add_node(Node::service("kube-service")).unwrap();
+        let n2 = source_graph.add_node(Node::database("kube-db")).unwrap();
+        source_graph.add_edge(Edge::new(EdgeType::Queries, n1, n2)).unwrap();
+
+        let mut combined = Graph::new();
+        let n3 = combined.add_node(Node::service("tf-service")).unwrap();
+        combined.merge(&source_graph).unwrap();
+
+        assert_eq!(combined.node_count(), 3);
+        assert_eq!(combined.edge_count(), 1);
+        assert!(combined.get_node(&n1).is_some());
+        assert!(combined.get_node(&n3).is_some());
     }
 }

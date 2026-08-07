@@ -1,6 +1,6 @@
 [package]
 name = "pyblastradius"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.70"
 description = "Operational Blast Radius Intelligence Platform - Predict cascading failures and quantify business impact"
@@ -52,8 +52,9 @@ dirs = "5.0"
 # HTTP & networking (optional)
 reqwest = { version = "0.11", features = ["json", "stream"], optional = true }
 hyper = { version = "0.14", optional = true }
-tonic = { version = "0.10", optional = true }
-prost = { version = "0.12", optional = true }
+tonic = { version = "0.14", optional = true }
+prost = { version = "0.13", optional = true }
+opentelemetry-proto = { version = "0.32", features = ["gen-tonic", "trace"], optional = true }
 
 # Error handling
 backtrace = "0.3"
@@ -90,5 +91,5 @@ lto = true
 [features]
 default = ["http-discovery", "otlp-traces"]
 http-discovery = ["reqwest", "hyper"]
-otlp-traces = ["tonic", "prost"]
+otlp-traces = ["tonic", "prost", "opentelemetry-proto"]
 neo4j-backend = []

@@ -1,6 +1,7 @@
 pub mod kubernetes;
 pub mod terraform;
 pub mod airflow;
+#[cfg(feature = "otlp-traces")]
 pub mod otlp;
 
 // Discovery trait

@@ -1,9 +1,15 @@
 use clap::{Parser, Subcommand};
+use pyblastradius::graph::node::NodeId;
+use serde::Deserialize;
 use pyblastradius::{
-    about, Graph, Node, Edge, NodeType, EdgeType, BlastRadiusAnalyzer,
-    CriticalityScorer, Simulator, FailureType,
+    about, AirflowDiscoverer, BlastRadiusAnalyzer, CriticalityScorer, Error,
+    ExportFormat, FailureType, Graph, GraphExporter, GraphImporter, KubernetesDiscoverer,
+    Simulator, TerraformDiscoverer,
 };
 use std::path::PathBuf;
+
+#[cfg(feature = "otlp-traces")]
+use pyblastradius::OtlpDiscoverer;
 
 #[derive(Parser)]
 #[command(name = "pyblastradius")]
@@ -32,6 +38,15 @@ enum Commands {
         #[arg(short, long)]
         airflow: Option<PathBuf>,
 
+        /// OTLP endpoint to listen on for a live trace collection window
+        /// (e.g. "0.0.0.0:4317"). Requires the `otlp-traces` feature.
+        #[arg(long)]
+        otlp: Option<String>,
+
+        /// How long to collect OTLP traces before building the graph
+        #[arg(long, default_value_t = 30)]
+        otlp_timeout_seconds: u64,
+
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
@@ -44,7 +59,8 @@ enum Commands {
         #[arg(short, long)]
         service: String,
 
-        #[arg(short, long)]
+        /// No short flag: `-d` is already claimed by the global `--debug` flag.
+        #[arg(long)]
         depth: Option<usize>,
 
         #[arg(short, long)]
@@ -109,6 +125,40 @@ enum Commands {
     Version,
 }
 
+/// Finds a node by exact name, falling back to a suffix match on
+/// `<name>.<namespace>`-style keys (how Kubernetes-discovered nodes are
+/// named) so `--service auth-service` matches a node named
+/// `auth-service.default`.
+fn find_node_by_name(graph: &Graph, name: &str) -> Option<NodeId> {
+    graph
+        .nodes()
+        .find(|n| n.name == name)
+        .or_else(|| graph.nodes().find(|n| n.name.starts_with(&format!("{}.", name))))
+        .map(|n| n.id)
+}
+
+fn parse_failure_type(s: Option<&str>) -> FailureType {
+    match s {
+        Some("degradation") => FailureType::Degradation,
+        Some("high_latency") => FailureType::HighLatency,
+        Some("high_error_rate") => FailureType::HighErrorRate,
+        Some("data_quality") => FailureType::DataQualityIssue,
+        _ => FailureType::Outage,
+    }
+}
+
+fn export_format(s: Option<&str>) -> ExportFormat {
+    match s.map(str::to_lowercase).as_deref() {
+        Some("yaml") => ExportFormat::Yaml,
+        Some("graphml") => ExportFormat::GraphML,
+        Some("dot") | None => ExportFormat::Dot,
+        Some(other) => {
+            eprintln!("⚠️  Unknown format {:?}, defaulting to dot", other);
+            ExportFormat::Dot
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
@@ -123,42 +173,78 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kubernetes,
             terraform,
             airflow,
+            otlp,
+            otlp_timeout_seconds,
             output,
         } => {
             println!("🔍 Scanning for dependencies...\n");
 
-            // TODO: Implement actual discovery parsers
             let mut graph = Graph::new();
+            let mut sources_scanned = 0;
 
-            // Add sample nodes for demo
-            if kubernetes.is_some() {
-                println!("  📦 Scanning Kubernetes manifests...");
-                let api = graph.add_node(Node::service("api-server").with_criticality(0.9))?;
-                let auth = graph
-                    .add_node(Node::service("auth-service").with_criticality(0.95))?;
-                let db = graph.add_node(Node::database("postgresql").with_criticality(0.98))?;
-
-                graph.add_edge(
-                    Edge::new(EdgeType::Calls, api, auth)
-                        .with_criticality(true)
-                        .add_discovered_via("kubernetes"),
-                )?;
-                graph.add_edge(
-                    Edge::new(EdgeType::Queries, auth, db)
-                        .with_criticality(true)
-                        .add_discovered_via("kubernetes"),
-                )?;
-                println!("    ✅ Found 3 services");
+            if let Some(path) = &kubernetes {
+                println!("  📦 Scanning Kubernetes manifests at {:?}...", path);
+                let discoverer = KubernetesDiscoverer::from_manifests_dir(path.to_string_lossy());
+                let discovered = discoverer.discover()?;
+                println!(
+                    "    ✅ Found {} nodes, {} edges",
+                    discovered.node_count(),
+                    discovered.edge_count()
+                );
+                graph.merge(&discovered)?;
+                sources_scanned += 1;
             }
 
-            if terraform.is_some() {
-                println!("  🏗️  Scanning Terraform configs...");
-                println!("    ✅ Found infrastructure dependencies");
+            if let Some(path) = &terraform {
+                println!("  🏗️  Scanning Terraform configs at {:?}...", path);
+                let discoverer = TerraformDiscoverer::new(path.to_string_lossy().to_string());
+                let discovered = discoverer.discover()?;
+                println!(
+                    "    ✅ Found {} nodes, {} edges",
+                    discovered.node_count(),
+                    discovered.edge_count()
+                );
+                graph.merge(&discovered)?;
+                sources_scanned += 1;
             }
 
-            if airflow.is_some() {
-                println!("  📊 Scanning Airflow DAGs...");
-                println!("    ✅ Found pipeline dependencies");
+            if let Some(path) = &airflow {
+                println!("  📊 Scanning Airflow DAGs at {:?}...", path);
+                let discoverer = AirflowDiscoverer::new(path.to_string_lossy().to_string());
+                let discovered = discoverer.discover()?;
+                println!(
+                    "    ✅ Found {} nodes, {} edges",
+                    discovered.node_count(),
+                    discovered.edge_count()
+                );
+                graph.merge(&discovered)?;
+                sources_scanned += 1;
+            }
+
+            #[cfg(feature = "otlp-traces")]
+            if let Some(endpoint) = &otlp {
+                println!(
+                    "  📡 Listening for OTLP traces on {} for {}s...",
+                    endpoint, otlp_timeout_seconds
+                );
+                let discoverer =
+                    OtlpDiscoverer::new(endpoint.clone()).with_timeout(otlp_timeout_seconds);
+                let discovered = discoverer.discover()?;
+                println!(
+                    "    ✅ Observed {} nodes, {} edges from live traces",
+                    discovered.node_count(),
+                    discovered.edge_count()
+                );
+                graph.merge(&discovered)?;
+                sources_scanned += 1;
+            }
+            #[cfg(not(feature = "otlp-traces"))]
+            if otlp.is_some() {
+                eprintln!("⚠️  --otlp requires the `otlp-traces` feature (not enabled in this build)");
+            }
+
+            if sources_scanned == 0 {
+                println!("  ⚠️  No discovery source specified. Pass --kubernetes, --terraform, --airflow, and/or --otlp.");
             }
 
             let metrics = graph.metrics();
@@ -168,32 +254,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
 
             if let Some(output_path) = output {
-                println!("\n💾 Saving graph to {:?}", output_path);
+                GraphExporter::save_file(&graph, &output_path)?;
+                println!("\n💾 Saved graph to {:?}", output_path);
             }
 
             Ok(())
         }
 
         Commands::Analyze {
-            graph: _,
-            service: _,
-            depth,
-            output: _,
+            graph,
+            service,
+            depth: _depth,
+            output,
         } => {
             println!("📊 Analyzing blast radius...\n");
 
-            // TODO: Load actual graph
-            let mut graph = Graph::new();
-            let api = graph.add_node(Node::service("api-server"))?;
-            let auth = graph.add_node(Node::service("auth-service"))?;
-            let db = graph.add_node(Node::database("postgresql"))?;
+            let graph = GraphImporter::load_file(&graph)?;
+            let node_id = find_node_by_name(&graph, &service).ok_or_else(|| {
+                Error::NotFound(format!("service {:?} not found in graph", service))
+            })?;
 
-            graph.add_edge(Edge::new(EdgeType::Calls, api, auth).with_criticality(true))?;
-            graph.add_edge(Edge::new(EdgeType::Queries, auth, db).with_criticality(true))?;
+            let result = BlastRadiusAnalyzer::analyze(&graph, node_id)?;
 
-            let result = BlastRadiusAnalyzer::analyze(&graph, api)?;
-
-            println!("🎯 Blast Radius Analysis for api-server\n");
+            println!("🎯 Blast Radius Analysis for {}\n", service);
             println!("   Directly Impacted: {}", result.directly_impacted.len());
             println!("   Indirectly Impacted: {}", result.indirectly_impacted.len());
             println!(
@@ -202,21 +285,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             println!("   Critical Paths: {}\n", result.critical_path_count);
 
+            if let Some(output_path) = output {
+                let json = serde_json::to_string_pretty(&result)?;
+                std::fs::write(&output_path, json)?;
+                println!("💾 Saved analysis to {:?}", output_path);
+            }
+
             Ok(())
         }
 
         Commands::Criticality {
-            graph: _,
+            graph,
             threshold,
-            output: _,
+            output,
         } => {
             println!("🔴 Computing criticality scores...\n");
 
-            // TODO: Load actual graph
-            let mut graph = Graph::new();
-            let _api = graph.add_node(Node::service("api-server").with_criticality(0.9))?;
-            let _db = graph.add_node(Node::database("postgresql").with_criticality(0.98))?;
-
+            let graph = GraphImporter::load_file(&graph)?;
             let scores = CriticalityScorer::score_all(&graph)?;
 
             println!("Criticality Ranking:\n");
@@ -226,66 +311,76 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             println!("  {}", "-".repeat(49));
 
-            for score in scores {
-                if threshold.is_none()
-                    || score.criticality_score >= threshold.unwrap_or(0.0) * 100.0
-                {
-                    println!(
-                        "  {:<25} {:<12.1} {:<12}",
-                        score.node_name, score.criticality_score, score.downstream_count
-                    );
-                }
+            let filtered: Vec<_> = scores
+                .into_iter()
+                .filter(|score| {
+                    threshold.is_none() || score.criticality_score >= threshold.unwrap_or(0.0) * 100.0
+                })
+                .collect();
+
+            for score in &filtered {
+                println!(
+                    "  {:<25} {:<12.1} {:<12}",
+                    score.node_name, score.criticality_score, score.downstream_count
+                );
+            }
+
+            if let Some(output_path) = output {
+                let json = serde_json::to_string_pretty(&filtered)?;
+                std::fs::write(&output_path, json)?;
+                println!("\n💾 Saved criticality ranking to {:?}", output_path);
             }
 
             Ok(())
         }
 
         Commands::Graph {
-            input: _,
+            input,
             output,
             format,
         } => {
             println!("📈 Generating graph visualization...\n");
 
-            let format_str = format.as_deref().unwrap_or("dot");
-            println!("  Format: {}", format_str);
+            let graph = GraphImporter::load_file(&input)?;
+            let fmt = export_format(format.as_deref());
+            let rendered = GraphExporter::export(&graph, fmt)?;
+
+            println!("  Format: {:?}", fmt);
+            println!(
+                "  Source: {} nodes, {} edges",
+                graph.node_count(),
+                graph.edge_count()
+            );
 
             if let Some(output_path) = output {
-                println!("  Output: {:?}\n", output_path);
-                println!("  ✅ Graph visualization generated");
+                std::fs::write(&output_path, &rendered)?;
+                println!("  Output: {:?}\n  ✅ Graph visualization generated", output_path);
+            } else {
+                println!();
+                println!("{}", rendered);
             }
 
             Ok(())
         }
 
         Commands::Simulate {
-            graph: _,
+            graph,
             service,
             failure_type,
             max_depth,
         } => {
             println!("⚡ Simulating failure cascade for {}\n", service);
 
-            // TODO: Load actual graph
-            let mut graph = Graph::new();
-            let s1 = graph.add_node(Node::service("api-server").with_recovery_time(5))?;
-            let s2 = graph.add_node(Node::service("auth-service").with_recovery_time(10))?;
-            let s3 = graph.add_node(Node::database("postgresql").with_recovery_time(15))?;
+            let graph = GraphImporter::load_file(&graph)?;
+            let node_id = find_node_by_name(&graph, &service).ok_or_else(|| {
+                Error::NotFound(format!("service {:?} not found in graph", service))
+            })?;
 
-            graph.add_edge(
-                Edge::new(EdgeType::Calls, s1, s2)
-                    .with_criticality(true),
-            )?;
-            graph.add_edge(
-                Edge::new(EdgeType::Queries, s2, s3)
-                    .with_criticality(true),
-            )?;
-
-            let failure = FailureType::Outage;
+            let failure = parse_failure_type(failure_type.as_deref());
             let result = if let Some(depth) = max_depth {
-                Simulator::simulate_with_time_limit(&graph, s1, failure, depth)?
+                Simulator::simulate_with_time_limit(&graph, node_id, failure, depth)?
             } else {
-                Simulator::simulate(&graph, s1, failure)?
+                Simulator::simulate(&graph, node_id, failure)?
             };
 
             println!("  Cascade Path: {:?}", result.affected_services);
@@ -301,24 +396,71 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
 
-        Commands::AnalyzeDeployment {
-            manifest: _,
-            graph: _,
-        } => {
+        Commands::AnalyzeDeployment { manifest, graph } => {
             println!("🚀 Analyzing deployment risk...\n");
-            println!("  ✅ Healthy state for deployment");
-            println!("  Recommended window: 2:00 AM UTC\n");
+
+            let graph_data = GraphImporter::load_file(&graph)?;
+
+            // Identify what's being deployed from the manifest itself,
+            // rather than assuming a fixed "healthy" outcome.
+            let manifest_content = std::fs::read_to_string(&manifest)?;
+            // Manifests are commonly multi-document (`---`-separated); take
+            // the first document that actually names a service — plain
+            // `serde_yaml::from_str` errors out on multi-document input.
+            let service_name = serde_yaml::Deserializer::from_str(&manifest_content)
+                .filter_map(|doc| serde_yaml::Value::deserialize(doc).ok())
+                .find_map(|v| {
+                    v.get("metadata")
+                        .and_then(|m| m.get("name"))
+                        .and_then(|n| n.as_str())
+                        .map(String::from)
+                });
+
+            match service_name.as_deref().and_then(|name| find_node_by_name(&graph_data, name)) {
+                Some(node_id) => {
+                    let node = graph_data.get_node(&node_id).unwrap();
+                    let blast_result = BlastRadiusAnalyzer::analyze(&graph_data, node_id)?;
+
+                    let risk = if node.properties.criticality > 0.8 || blast_result.blast_radius_score > 50.0 {
+                        "HIGH"
+                    } else if node.properties.criticality > 0.5 {
+                        "MEDIUM"
+                    } else {
+                        "LOW"
+                    };
+
+                    println!("  Service: {}", node.name);
+                    println!("  Criticality: {:.2}", node.properties.criticality);
+                    println!("  Blast Radius Score: {:.1}/100", blast_result.blast_radius_score);
+                    println!("  Downstream Impact: {} services", blast_result.directly_impacted.len() + blast_result.indirectly_impacted.len());
+                    println!("  Risk Level: {}", risk);
+                    if risk == "HIGH" {
+                        println!("\n  ⚠️  Recommend deploying during your lowest-traffic window and having rollback ready.");
+                    } else {
+                        println!("\n  ✅ No elevated risk signals from the dependency graph.");
+                    }
+                }
+                None => {
+                    println!("  ⚠️  Could not identify this manifest's service in the dependency graph.");
+                    println!("     Risk Level: UNKNOWN (new or unrecognized service — no historical blast-radius data)");
+                }
+            }
+            println!();
 
             Ok(())
         }
 
-        Commands::Status { graph: _ } => {
+        Commands::Status { graph } => {
             println!("📊 PyBlastRadius System Status\n");
-            println!("  Nodes: 42");
-            println!("  Edges: 87");
-            println!("  Avg Degree: 4.14");
-            println!("  Density: 0.052");
-            println!("  Connected Components: 3\n");
+
+            let graph = GraphImporter::load_file(&graph)?;
+            let metrics = graph.metrics();
+
+            println!("  Nodes: {}", metrics.node_count);
+            println!("  Edges: {}", metrics.edge_count);
+            println!("  Avg Degree: {:.2}", metrics.avg_degree);
+            println!("  Density: {:.3}", metrics.density);
+            println!("  Connected Components: {}\n", metrics.connected_components);
 
             Ok(())
         }

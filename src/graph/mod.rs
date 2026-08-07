@@ -8,7 +8,7 @@ pub use node::{Node, NodeType, NodeProperties};
 pub use edge::{Edge, EdgeType, EdgeProperties};
 pub use graph::{Graph, GraphMetrics};
 pub use traversal::{BfsTraversal, DfsTraversal, TopoSort, TraversalResult};
-pub use serialization::{GraphExporter, ExportFormat};
+pub use serialization::{GraphExporter, GraphImporter, ExportFormat};
 
 #[cfg(test)]
 mod tests {

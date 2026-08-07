@@ -1,12 +1,35 @@
 use crate::error::Result;
-use crate::graph::{Graph, Node, Edge, NodeType, EdgeType};
+use crate::graph::{Edge, EdgeType, Graph, Node, NodeType};
+use serde::Deserialize;
 use std::collections::HashMap;
+use walkdir::WalkDir;
 
-/// Kubernetes manifest parser for dependency discovery
+/// Kubernetes manifest parser for dependency discovery.
+///
+/// Parses real Service/Deployment/StatefulSet manifests found under
+/// `manifests_dir` (YAML/YML files, `---`-separated multi-document files
+/// supported). Edges are inferred by scanning container env var values for
+/// references to other discovered workload names — the same "MVP regex/
+/// heuristic, not a full schema-aware parser" quality bar this project
+/// already uses for Terraform discovery, not a live cluster API client.
 pub struct KubernetesDiscoverer {
     pub kubeconfig_path: Option<String>,
     pub context: Option<String>,
     pub namespaces: Vec<String>,
+    pub manifests_dir: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct K8sManifest {
+    kind: Option<String>,
+    metadata: Option<K8sMetadata>,
+    spec: Option<serde_yaml::Value>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct K8sMetadata {
+    name: Option<String>,
+    namespace: Option<String>,
 }
 
 impl KubernetesDiscoverer {
@@ -15,6 +38,16 @@ impl KubernetesDiscoverer {
             kubeconfig_path: None,
             context: None,
             namespaces: vec!["default".to_string()],
+            manifests_dir: None,
+        }
+    }
+
+    /// Discover from a directory of Kubernetes YAML manifests (the mode the
+    /// CLI's `--kubernetes <path>` flag uses).
+    pub fn from_manifests_dir(dir: impl Into<String>) -> Self {
+        KubernetesDiscoverer {
+            manifests_dir: Some(dir.into()),
+            ..Self::new()
         }
     }
 
@@ -25,102 +58,197 @@ impl KubernetesDiscoverer {
 
     pub fn discover(&self) -> Result<Graph> {
         let mut graph = Graph::new();
+
+        let Some(dir) = &self.manifests_dir else {
+            // No manifests directory configured (e.g. the legacy
+            // kubeconfig-based live-cluster mode was never implemented) —
+            // an empty graph is the honest result, not fabricated demo data.
+            return Ok(graph);
+        };
+
         let mut node_map: HashMap<String, crate::graph::node::NodeId> = HashMap::new();
+        let mut env_values: HashMap<String, Vec<String>> = HashMap::new();
 
-        // Parse Services
-        self.parse_services(&mut graph, &mut node_map)?;
+        for entry in WalkDir::new(dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .map_or(false, |ext| ext == "yaml" || ext == "yml")
+            })
+        {
+            self.parse_file(entry.path(), &mut graph, &mut node_map, &mut env_values)?;
+        }
 
-        // Parse Deployments
-        self.parse_deployments(&mut graph, &mut node_map)?;
-
-        // Parse StatefulSets
-        self.parse_statefulsets(&mut graph, &mut node_map)?;
-
-        // Add dependency edges
-        self.add_dependency_edges(&mut graph, &node_map)?;
+        self.infer_edges_from_env(&mut graph, &node_map, &env_values)?;
 
         Ok(graph)
     }
 
-    fn parse_services(
+    fn parse_file(
         &self,
+        path: &std::path::Path,
         graph: &mut Graph,
         node_map: &mut HashMap<String, crate::graph::node::NodeId>,
+        env_values: &mut HashMap<String, Vec<String>>,
     ) -> Result<()> {
-        for namespace in &self.namespaces {
-            // Example K8s services
-            let services = vec!["api-gateway", "auth-service", "checkout-service", "payment-service"];
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            crate::error::Error::parse_error(format!("Failed to read {}: {}", path.display(), e))
+        })?;
 
-            for service in services {
-                let key = format!("{}.{}", service, namespace);
-                let node = Node::service(&key)
-                    .with_criticality(0.7)
-                    .add_discovered_via("kubernetes-service");
+        for document in serde_yaml::Deserializer::from_str(&content) {
+            let manifest = match K8sManifest::deserialize(document) {
+                Ok(m) => m,
+                Err(_) => continue, // skip non-manifest / malformed documents rather than aborting the whole scan
+            };
+            self.process_manifest(manifest, graph, node_map, env_values)?;
+        }
 
-                let node_id = graph.add_node(node)?;
-                node_map.insert(key, node_id);
+        Ok(())
+    }
+
+    fn process_manifest(
+        &self,
+        manifest: K8sManifest,
+        graph: &mut Graph,
+        node_map: &mut HashMap<String, crate::graph::node::NodeId>,
+        env_values: &mut HashMap<String, Vec<String>>,
+    ) -> Result<()> {
+        let Some(kind) = manifest.kind.as_deref() else {
+            return Ok(());
+        };
+        let Some(name) = manifest.metadata.as_ref().and_then(|m| m.name.clone()) else {
+            return Ok(());
+        };
+        let namespace = manifest
+            .metadata
+            .as_ref()
+            .and_then(|m| m.namespace.clone())
+            .unwrap_or_else(|| "default".to_string());
+        let key = format!("{}.{}", name, namespace);
+
+        let node_type = match kind {
+            "Service" | "Deployment" | "StatefulSet" | "DaemonSet" => {
+                // A Service fronting a datastore StatefulSet is commonly
+                // named after it (e.g. a "postgres" Service in front of a
+                // "postgres" StatefulSet) — classify by name regardless of
+                // which kind declared it, not just StatefulSet.
+                if Self::looks_like_datastore(&name) {
+                    Self::datastore_type(&name)
+                } else {
+                    NodeType::Service
+                }
+            }
+            _ => return Ok(()), // ConfigMap, Ingress, etc. aren't dependency nodes on their own
+        };
+
+        if !node_map.contains_key(&key) {
+            let criticality = if matches!(node_type, NodeType::Database) {
+                0.95
+            } else {
+                0.7
+            };
+            let node = Node::new(&key, node_type)
+                .with_criticality(criticality)
+                .add_discovered_via(format!("kubernetes-{}", kind.to_lowercase()));
+            let node_id = graph.add_node(node)?;
+            node_map.insert(key.clone(), node_id);
+        }
+
+        if let Some(spec) = &manifest.spec {
+            let values = Self::extract_env_values(spec);
+            if !values.is_empty() {
+                env_values.entry(key).or_default().extend(values);
             }
         }
+
         Ok(())
     }
 
-    fn parse_deployments(
-        &self,
-        graph: &mut Graph,
-        node_map: &mut HashMap<String, crate::graph::node::NodeId>,
-    ) -> Result<()> {
-        // Parse Deployment manifests for container image and env var dependencies
-        Ok(())
+    /// Common datastore StatefulSet names get a more specific node type;
+    /// anything else defaults to a generic Service (still real, just less
+    /// specifically classified without deeper image/label inspection).
+    fn looks_like_datastore(name: &str) -> bool {
+        ["postgres", "postgresql", "mysql", "redis", "kafka", "mongodb", "cassandra"]
+            .iter()
+            .any(|d| name.to_lowercase().contains(d))
     }
 
-    fn parse_statefulsets(
-        &self,
-        graph: &mut Graph,
-        node_map: &mut HashMap<String, crate::graph::node::NodeId>,
-    ) -> Result<()> {
-        for namespace in &self.namespaces {
-            let statefulsets = vec![
-                ("postgres", NodeType::Database),
-                ("redis", NodeType::Cache),
-                ("kafka", NodeType::Topic),
-            ];
+    fn datastore_type(name: &str) -> NodeType {
+        let lower = name.to_lowercase();
+        if lower.contains("redis") {
+            NodeType::Cache
+        } else if lower.contains("kafka") {
+            NodeType::Topic
+        } else {
+            NodeType::Database
+        }
+    }
 
-            for (name, node_type) in statefulsets {
-                let key = format!("{}.{}", name, namespace);
-                let node = Node::new(&key, node_type)
-                    .with_criticality(0.9)
-                    .add_discovered_via("kubernetes-statefulset");
+    /// Pulls every container env var value out of a Deployment/StatefulSet
+    /// spec (`spec.template.spec.containers[].env[].value`), or a Service
+    /// spec (no-op there — services don't carry env vars). Used to infer
+    /// which other workloads a container references by name.
+    fn extract_env_values(spec: &serde_yaml::Value) -> Vec<String> {
+        let mut values = Vec::new();
+        let containers = spec
+            .get("template")
+            .and_then(|t| t.get("spec"))
+            .and_then(|s| s.get("containers"))
+            .or_else(|| spec.get("containers"))
+            .and_then(|c| c.as_sequence());
 
-                let node_id = graph.add_node(node)?;
-                node_map.insert(key, node_id);
+        let Some(containers) = containers else {
+            return values;
+        };
+
+        for container in containers {
+            if let Some(env) = container.get("env").and_then(|e| e.as_sequence()) {
+                for var in env {
+                    if let Some(value) = var.get("value").and_then(|v| v.as_str()) {
+                        values.push(value.to_string());
+                    }
+                }
             }
         }
-        Ok(())
+
+        values
     }
 
-    fn add_dependency_edges(
+    fn infer_edges_from_env(
         &self,
         graph: &mut Graph,
         node_map: &HashMap<String, crate::graph::node::NodeId>,
+        env_values: &HashMap<String, Vec<String>>,
     ) -> Result<()> {
-        let dependencies = vec![
-            ("api-gateway.default", "auth-service.default", EdgeType::Calls),
-            ("auth-service.default", "postgres.default", EdgeType::Queries),
-            ("auth-service.default", "redis.default", EdgeType::Calls),
-            ("checkout-service.default", "payment-service.default", EdgeType::Calls),
-            ("payment-service.default", "postgres.default", EdgeType::Queries),
-        ];
-
-        for (source, target, edge_type) in dependencies {
-            if let (Some(&source_id), Some(&target_id)) = (node_map.get(source), node_map.get(target)) {
-                let edge = Edge::new(edge_type, source_id, target_id)
-                    .with_criticality(true)
-                    .add_discovered_via("kubernetes");
-
-                graph.add_edge(edge)?;
+        for (source_key, values) in env_values {
+            let Some(&source_id) = node_map.get(source_key) else {
+                continue;
+            };
+            for (target_key, &target_id) in node_map {
+                if target_key == source_key {
+                    continue;
+                }
+                let target_short_name = target_key.split('.').next().unwrap_or(target_key);
+                let referenced = values
+                    .iter()
+                    .any(|v| v.to_lowercase().contains(&target_short_name.to_lowercase()));
+                if referenced {
+                    let target_node = graph.get_node(&target_id);
+                    let edge_type = match target_node.map(|n| &n.node_type) {
+                        Some(NodeType::Database) => EdgeType::Queries,
+                        Some(NodeType::Topic) => EdgeType::Produces,
+                        _ => EdgeType::Calls,
+                    };
+                    let edge = Edge::new(edge_type, source_id, target_id)
+                        .with_criticality(true)
+                        .with_confidence(0.6) // env-var substring match, not a verified call graph
+                        .add_discovered_via("kubernetes-env-reference");
+                    graph.add_edge(edge)?;
+                }
             }
         }
-
         Ok(())
     }
 }
@@ -136,11 +264,131 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_kubernetes_discovery() {
+    fn test_kubernetes_discovery_without_manifests_dir_is_honestly_empty() {
         let discoverer = KubernetesDiscoverer::new();
         let graph = discoverer.discover().unwrap();
 
-        assert!(graph.node_count() > 0);
-        assert!(graph.edge_count() > 0);
+        assert_eq!(graph.node_count(), 0);
+        assert_eq!(graph.edge_count(), 0);
+    }
+
+    #[test]
+    fn test_kubernetes_discovery_parses_real_service_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("service.yaml"),
+            r#"
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: prod
+spec:
+  ports:
+    - port: 80
+"#,
+        )
+        .unwrap();
+
+        let discoverer = KubernetesDiscoverer::from_manifests_dir(dir.path().to_str().unwrap());
+        let graph = discoverer.discover().unwrap();
+
+        assert_eq!(graph.node_count(), 1);
+        assert_eq!(graph.nodes().next().unwrap().name, "api-gateway.prod");
+    }
+
+    #[test]
+    fn test_kubernetes_discovery_infers_edges_from_env_vars() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("manifests.yaml"),
+            r#"
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  ports:
+    - port: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+        - name: auth
+          image: auth:latest
+          env:
+            - name: DB_HOST
+              value: "postgres.default.svc.cluster.local"
+"#,
+        )
+        .unwrap();
+
+        let discoverer = KubernetesDiscoverer::from_manifests_dir(dir.path().to_str().unwrap());
+        let graph = discoverer.discover().unwrap();
+
+        assert_eq!(graph.node_count(), 2);
+        assert_eq!(graph.edge_count(), 1);
+        let edge = graph.edges().next().unwrap();
+        assert_eq!(edge.edge_type, EdgeType::Queries);
+    }
+
+    #[test]
+    fn test_kubernetes_discovery_skips_malformed_documents_instead_of_aborting() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("mixed.yaml"),
+            r#"
+this: is not a k8s manifest at all
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: real-service
+  namespace: default
+spec: {}
+"#,
+        )
+        .unwrap();
+
+        let discoverer = KubernetesDiscoverer::from_manifests_dir(dir.path().to_str().unwrap());
+        let graph = discoverer.discover().unwrap();
+
+        assert_eq!(graph.node_count(), 1);
+        assert_eq!(graph.nodes().next().unwrap().name, "real-service.default");
+    }
+
+    #[test]
+    fn test_kubernetes_discovery_classifies_datastore_statefulsets() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("redis.yaml"),
+            r#"
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-cache
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+        - name: redis
+          image: redis:7
+"#,
+        )
+        .unwrap();
+
+        let discoverer = KubernetesDiscoverer::from_manifests_dir(dir.path().to_str().unwrap());
+        let graph = discoverer.discover().unwrap();
+
+        assert_eq!(graph.node_count(), 1);
+        assert_eq!(graph.nodes().next().unwrap().node_type, NodeType::Cache);
     }
 }

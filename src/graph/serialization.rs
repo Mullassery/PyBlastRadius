@@ -1,6 +1,15 @@
 use crate::error::{Error, Result};
-use crate::graph::Graph;
+use crate::graph::{Edge, Graph, Node};
 use serde::{Deserialize, Serialize};
+
+/// Lossless graph snapshot for save/load round-tripping (unlike
+/// `GraphExport`, which is a simplified, string-typed view meant for human
+/// inspection / interop with other tools and can't be loaded back).
+#[derive(Debug, Serialize, Deserialize)]
+struct GraphSnapshot {
+    nodes: Vec<Node>,
+    edges: Vec<Edge>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportFormat {
@@ -135,6 +144,35 @@ impl GraphExporter {
         Ok(dot)
     }
 
+    /// Losslessly serializes the graph (all node/edge fields, original IDs)
+    /// so it can be reloaded exactly via [`GraphImporter::load_json`].
+    pub fn save_json(graph: &Graph) -> Result<String> {
+        let snapshot = GraphSnapshot {
+            nodes: graph.nodes().cloned().collect(),
+            edges: graph.edges().cloned().collect(),
+        };
+        serde_json::to_string_pretty(&snapshot)
+            .map_err(|e| Error::parse_error(format!("graph snapshot serialization failed: {}", e)))
+    }
+
+    /// Saves a graph to a JSON or YAML file, inferring format from the file
+    /// extension (`.yaml`/`.yml` vs everything else treated as JSON).
+    pub fn save_file(graph: &Graph, path: &std::path::Path) -> Result<()> {
+        let contents = match path.extension().and_then(|e| e.to_str()) {
+            Some("yaml") | Some("yml") => {
+                let snapshot = GraphSnapshot {
+                    nodes: graph.nodes().cloned().collect(),
+                    edges: graph.edges().cloned().collect(),
+                };
+                serde_yaml::to_string(&snapshot)
+                    .map_err(|e| Error::parse_error(format!("graph snapshot YAML serialization failed: {}", e)))?
+            }
+            _ => Self::save_json(graph)?,
+        };
+        std::fs::write(path, contents)?;
+        Ok(())
+    }
+
     fn build_export(graph: &Graph) -> GraphExport {
         let nodes = graph
             .nodes()
@@ -174,6 +212,48 @@ impl GraphExporter {
     }
 }
 
+pub struct GraphImporter;
+
+impl GraphImporter {
+    /// Loads a graph previously saved with [`GraphExporter::save_json`].
+    /// Node/edge IDs are preserved exactly (nodes are added first so edges
+    /// can resolve their source/target against them).
+    pub fn load_json(json: &str) -> Result<Graph> {
+        let snapshot: GraphSnapshot = serde_json::from_str(json)
+            .map_err(|e| Error::parse_error(format!("graph snapshot parse failed: {}", e)))?;
+
+        let mut graph = Graph::new();
+        for node in snapshot.nodes {
+            graph.add_node(node)?;
+        }
+        for edge in snapshot.edges {
+            graph.add_edge(edge)?;
+        }
+        Ok(graph)
+    }
+
+    /// Loads a graph from a JSON or YAML file, inferring format from the
+    /// file extension (`.yaml`/`.yml` vs everything else treated as JSON).
+    pub fn load_file(path: &std::path::Path) -> Result<Graph> {
+        let contents = std::fs::read_to_string(path)?;
+        match path.extension().and_then(|e| e.to_str()) {
+            Some("yaml") | Some("yml") => {
+                let snapshot: GraphSnapshot = serde_yaml::from_str(&contents)
+                    .map_err(|e| Error::parse_error(format!("graph snapshot YAML parse failed: {}", e)))?;
+                let mut graph = Graph::new();
+                for node in snapshot.nodes {
+                    graph.add_node(node)?;
+                }
+                for edge in snapshot.edges {
+                    graph.add_edge(edge)?;
+                }
+                Ok(graph)
+            }
+            _ => Self::load_json(&contents),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,5 +281,79 @@ mod tests {
         let dot = GraphExporter::export_dot(&graph).unwrap();
         assert!(dot.contains("digraph"));
         assert!(dot.contains("api"));
+    }
+
+    #[test]
+    fn test_save_load_json_round_trip_preserves_ids_and_properties() {
+        let mut graph = Graph::new();
+        let n1 = graph
+            .add_node(Node::service("api").with_criticality(0.9).with_owner("sre-team"))
+            .unwrap();
+        let n2 = graph.add_node(Node::database("postgres").with_criticality(0.98)).unwrap();
+        graph
+            .add_edge(
+                Edge::new(EdgeType::Queries, n1, n2)
+                    .with_latency(12.5)
+                    .with_error_rate(0.01)
+                    .with_confidence(0.8),
+            )
+            .unwrap();
+
+        let json = GraphExporter::save_json(&graph).unwrap();
+        let loaded = GraphImporter::load_json(&json).unwrap();
+
+        assert_eq!(loaded.node_count(), 2);
+        assert_eq!(loaded.edge_count(), 1);
+
+        let loaded_api = loaded.get_node(&n1).unwrap();
+        assert_eq!(loaded_api.name, "api");
+        assert_eq!(loaded_api.properties.criticality, 0.9);
+        assert_eq!(loaded_api.properties.owner, Some("sre-team".to_string()));
+
+        let loaded_edge = loaded.edges().next().unwrap();
+        assert_eq!(loaded_edge.source, n1);
+        assert_eq!(loaded_edge.target, n2);
+        assert_eq!(loaded_edge.properties.latency_ms, Some(12.5));
+        assert_eq!(loaded_edge.properties.error_rate, Some(0.01));
+    }
+
+    #[test]
+    fn test_save_load_file_round_trip_json() {
+        let mut graph = Graph::new();
+        let n1 = graph.add_node(Node::service("checkout")).unwrap();
+        let n2 = graph.add_node(Node::service("payment")).unwrap();
+        graph.add_edge(Edge::new(EdgeType::Calls, n1, n2)).unwrap();
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("graph.json");
+
+        GraphExporter::save_file(&graph, &path).unwrap();
+        let loaded = GraphImporter::load_file(&path).unwrap();
+
+        assert_eq!(loaded.node_count(), 2);
+        assert_eq!(loaded.edge_count(), 1);
+    }
+
+    #[test]
+    fn test_save_load_file_round_trip_yaml() {
+        let mut graph = Graph::new();
+        let n1 = graph.add_node(Node::service("checkout")).unwrap();
+        let n2 = graph.add_node(Node::service("payment")).unwrap();
+        graph.add_edge(Edge::new(EdgeType::Calls, n1, n2)).unwrap();
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("graph.yaml");
+
+        GraphExporter::save_file(&graph, &path).unwrap();
+        let loaded = GraphImporter::load_file(&path).unwrap();
+
+        assert_eq!(loaded.node_count(), 2);
+        assert_eq!(loaded.edge_count(), 1);
+    }
+
+    #[test]
+    fn test_load_json_rejects_malformed_input() {
+        let result = GraphImporter::load_json("not valid json");
+        assert!(result.is_err());
     }
 }
