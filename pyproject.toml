@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "pyblastradius"
-version = "0.1.0"
+version = "0.2.0"
 description = "Operational Blast Radius Intelligence Platform - Predict cascading failures and quantify business impact"
 readme = "README.md"
 requires-python = ">=3.10"
