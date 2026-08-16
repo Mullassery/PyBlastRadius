@@ -1,5 +1,15 @@
 use serde::{Deserialize, Serialize};
 
+// Slack/PagerDuty client stubs.
+//
+// **Not wired to a real HTTP client.** These build the correct outbound
+// payload shape but never send it — the `reqwest` POST calls are commented
+// out below and each method just returns `Ok(())` / a hardcoded fake id.
+// They exist to document the intended integration shape, not as working
+// notification/incident clients. Do not rely on these for real alerting
+// until they're wired to an HTTP client; this is tracked as a known gap
+// rather than something this crate claims to do today.
+
 /// Slack Bot Integration for incident notifications
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlackIntegration {
