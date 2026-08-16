@@ -10,16 +10,22 @@
 
 ## Features
 
-- **Unified Dependency Discovery** — Kubernetes, Terraform, Airflow, OpenTelemetry traces
-- **Cascade Prediction** — Understand which systems fail when one service goes down
-- **Blast Radius Analysis** — BFS-based impact categorization (direct, indirect, tertiary)
-- **Criticality Scoring** — Risk-weighted ranking using downstream dependencies, recovery time, business exposure
-- **Hidden Dependency Detection** — Find undocumented dependencies via trace mining and semantic analysis
-- **Anomaly Detection** — Latency spikes, error rates, resource exhaustion with time-to-failure prediction
-- **Column-Level Lineage** — Track business impact from raw data through dashboards (via dbt)
-- **Data Quality Cascade** — Understand how quality issues propagate through pipelines (via StatGuardian)
-- **GraphQL API** — Query all analysis results programmatically
-- **Third-Party Integrations** — Slack alerts, PagerDuty incidents
+Working today, backed by the real Rust engine (`pyblastradius._core`):
+
+- **Blast Radius Analysis** — BFS-based impact categorization (direct, indirect, tertiary), via `BlastRadiusAnalyzer`
+- **Criticality Scoring** — Risk-weighted ranking using downstream dependencies, recovery time, business exposure, via `CriticalityScorer`
+- **Cascade Simulation** — Simulate outage/degradation/high-latency/high-error-rate/data-quality failures and estimate recovery time and business impact, via `Simulator`
+- **Graph import/export** — JSON round-trip and Graphviz DOT export
+- **REST API server** — FastAPI server with real bearer-token auth and an explicit CORS allowlist (`pyblastradius server`)
+- **CLI** — `analyze`, `criticality`, `simulate`, `visualize` commands operate on a graph you build or load from JSON
+
+Not yet implemented (present as scaffolding/placeholders, listed here so you don't spend time debugging them):
+
+- **Dependency discovery** — `KubernetesDiscoverer`, `TerraformDiscoverer`, `AirflowDiscoverer`, `OtelDiscoverer` (used by `pyblastradius scan`) currently always return an empty graph. There is no YAML/HCL parsing or live cluster/API connection behind them yet.
+- **Hidden Dependency Detection / Anomaly Detection** — `HiddenDependencyDetector` and `AnomalyDetector` always return empty results; they are not wired to any metrics/trace source.
+- **`pyblastradius.integrations`** — `OtelCollectorClient` and `StatGuardianClient` are placeholders that return empty/fake data; `DbtManifestParser` genuinely parses a dbt `manifest.json` you already have on disk and is real.
+- **GraphQL API** — not exposed anywhere; the Rust crate has a query-string builder (`src/api/graphql.rs`) that nothing serves or executes.
+- **Slack/PagerDuty integrations** — the Rust structs (`src/api/integrations.rs`) build correct payloads but never send them (the HTTP calls are commented out), and are not exposed to Python at all yet.
 
 ## Quick Start
 
@@ -41,16 +47,19 @@ pip install pyblastradius[server]
 
 ### CLI Usage
 
-```bash
-# Auto-discover dependencies in current directory
-pyblastradius scan
+`scan` is wired up end-to-end but its discoverers are not implemented yet
+(see Features above) — it will run without error and produce an empty
+graph. To analyze something real today, build a graph via the Python API
+below (or hand-write one and export it with `graph.to_json()`) and feed
+that JSON file into `analyze`/`criticality`/`simulate`.
 
-# Explicit source discovery
+```bash
+# Not yet functional - always produces an empty graph (see Features)
 pyblastradius scan \
   kubernetes://kubeconfig=~/.kube/config \
   terraform://path=./infrastructure
 
-# Analyze blast radius for a service
+# Analyze blast radius for a service (graph.json from Graph.to_json())
 pyblastradius analyze graph.json --service payment-service
 
 # Rank systems by criticality
@@ -97,18 +106,43 @@ pyblastradius analyze
 
 ### Python API
 
+This example is real and runnable end-to-end against the Rust engine —
+build a small graph by hand, then run blast-radius, criticality, and
+cascade-simulation analysis on it:
+
 ```python
-from pyblastradius import Graph, Node, BlastRadiusAnalyzer, KubernetesDiscoverer
+from pyblastradius import (
+    Graph, Node, Edge, NodeType, EdgeType, FailureType,
+    BlastRadiusAnalyzer, CriticalityScorer, Simulator,
+)
 
-# Discover dependencies from Kubernetes
-discoverer = KubernetesDiscoverer()
-graph = discoverer.discover()
+graph = Graph()
+api = graph.add_node(Node("api-server", NodeType.Service))
+auth = graph.add_node(Node("auth-service", NodeType.Service))
+db = graph.add_node(Node("postgresql", NodeType.Database))
 
-# Analyze blast radius
-result = BlastRadiusAnalyzer.analyze(graph, node_id)
-print(f"Blast radius score: {result.blast_radius_score:.1f}/100")
+graph.add_edge(Edge(EdgeType.Calls, api, auth))
+graph.add_edge(Edge(EdgeType.Calls, auth, db))
+
+# Blast radius: what does api-server's own call graph reach?
+result = BlastRadiusAnalyzer.analyze(graph, api)
+print(f"Blast radius score: {result.blast_radius_score:.2f}")
 print(f"Directly impacted: {len(result.directly_impacted)} services")
 print(f"Indirectly impacted: {len(result.indirectly_impacted)} services")
+
+# Criticality ranking across the whole graph
+for score in CriticalityScorer.score_all(graph):
+    print(score.node_name, score.criticality_score, score.is_single_point_of_failure)
+
+# Simulate a database outage
+sim = Simulator.simulate(graph, db, FailureType.Outage)
+print(f"Estimated recovery: {sim.estimated_recovery_time_minutes} min, "
+      f"business impact: {sim.business_impact_score:.1f}")
+
+# Persist/reload as JSON (this is what the CLI's `analyze`/`criticality`/
+# `simulate` commands read via `Graph.from_json(...)`)
+with open("graph.json", "w") as f:
+    f.write(graph.to_json())
 ```
 
 ## Architecture
@@ -136,6 +170,12 @@ PyBlastRadius orchestrates an open-source observability ecosystem:
 └─────────────────────────────────────────────────┘
 ```
 
+This is the intended end-state architecture. As of this release, the
+**Analysis Engines** box (blast radius, criticality, cascade simulation)
+is real and Rust-backed; the **Discovery Engines** and OpenTelemetry/dbt/
+StatGuardian integration boxes are scaffolding that returns empty/fake
+data today (see Features above for the exact status of each piece).
+
 ## Documentation
 
 - **[Quick Start](docs/QUICK_START.md)** — 5-minute tutorial with examples
@@ -158,111 +198,92 @@ PyBlastRadius provides:
 - **Anomaly detection** with time-to-failure estimates
 - **Open-source first** — works with any observability backend
 
-### Value
-- **50%+ MTTR reduction** through automated dependency discovery
-- **$705K+ per prevented incident** (based on $15K/min downtime)
+### Value (aspirational — not yet measured on real deployments)
+- **50%+ MTTR reduction** through automated dependency discovery, once discovery is implemented
+- **$705K+ per prevented incident** (illustrative, based on $15K/min downtime)
 - **99% cost savings** vs proprietary tools (OTel vs Datadog)
 - **Zero vendor lock-in** with open-source stack
 
+These are the goals the project is designed around, not measured results —
+there are no discovery engines wired up yet to generate the "automated
+dependency discovery" this depends on. Treat this section as intent, not a
+claim about the current release.
+
 ## Platform Support
 
-| Discovery Source | Status | Coverage |
+Discovery source integration status (i.e. what `pyblastradius scan` /
+`KubernetesDiscoverer` etc. actually do today):
+
+| Discovery Source | Status | Notes |
 |-----------------|--------|----------|
-| Kubernetes | ✅ Complete | Services, deployments, statefulsets, network policies |
-| Terraform | ✅ Complete | AWS, Azure, GCP resources and relationships |
-| Airflow | ✅ Complete | DAG lineage, task dependencies, operators |
-| OpenTelemetry | ✅ Complete | Runtime traces, service calls, latency/errors |
-| dbt | ✅ Complete | Column-level lineage, tests, model relationships |
-| StatGuardian | ✅ Complete | Data quality rules, cascade impact |
+| Kubernetes | 🚧 Not implemented | `discover()` always returns an empty graph; no manifest parsing or API calls |
+| Terraform | 🚧 Not implemented | `discover()` always returns an empty graph; no HCL parsing |
+| Airflow | 🚧 Not implemented | `discover()` always returns an empty graph |
+| OpenTelemetry | 🚧 Not implemented | `discover()` always returns an empty graph (there is a separate, real Rust OTLP client used by `examples/cli.rs`, but it is not exposed to the Python package) |
+| dbt | ✅ Partial | `DbtManifestParser` genuinely parses a local `manifest.json` for column lineage |
+| StatGuardian | 🚧 Not implemented | `StatGuardianClient` returns empty/hardcoded fake data |
+
+What **is** real and working: build a `Graph` directly via the Python API
+(`Graph`, `Node`, `Edge`) or load one from JSON, then run
+`BlastRadiusAnalyzer`, `CriticalityScorer`, and `Simulator` on it — that
+whole path is backed by real, tested Rust code. See the Python API example
+above.
 
 ## API Examples
 
-### GraphQL Queries
+### GraphQL
 
-```graphql
-query {
-  blastRadius(nodeId: "payment-service", maxDepth: 3) {
-    directlyImpacted { id name }
-    indirectlyImpacted { id name }
-    score
-  }
-  
-  criticality(limit: 10) {
-    nodeName
-    score
-    isSinglePointOfFailure
-  }
-  
-  anomalies(minSeverity: 0.7) {
-    nodeName
-    type
-    severity
-    predictedTTF
-  }
-}
-```
+Not implemented. The Rust crate contains a query-string builder
+(`src/api/graphql.rs`) for the intended future schema, but nothing serves
+or executes GraphQL queries today — there is no GraphQL endpoint to call.
 
 ### Python SDK
 
 ```python
-from pyblastradius.integrations import (
-    OtelCollectorClient,
-    StatGuardianClient,
-    DbtManifestParser,
-)
+from pyblastradius.integrations import DbtManifestParser
 
-# Connect to OpenTelemetry collector
-otel = OtelCollectorClient("localhost:4317")
-runtime_graph = otel.discover_dependencies(time_window_minutes=60)
-
-# Integrate data quality
-sg = StatGuardianClient("https://statguardian.example.com", "api_key")
-quality_rules = sg.get_quality_rules()
-quality_incidents = sg.track_quality_incident(incident)
-
-# Parse dbt lineage
+# Parse dbt lineage (the one integration in this module that's real)
 dbt = DbtManifestParser("./dbt/manifest.json")
-metadata = dbt.parse_manifest()
-lineage = dbt.extract_column_lineage(metadata)
+lineage = dbt.extract_column_lineage()
 ```
+
+`OtelCollectorClient` and `StatGuardianClient` also live in
+`pyblastradius.integrations` but are placeholders — `discover_dependencies()`
+always returns an empty graph and `get_quality_rules()`/
+`track_quality_incident()` return empty/hardcoded data, not real results
+from a live collector or StatGuardian instance.
 
 ## Integrations
 
-### Real-Time Alerts
+**Not usable from Python today.** The Rust crate has `SlackIntegration` and
+`PagerDutyIntegration` structs (`src/api/integrations.rs`) that build
+correct Slack/PagerDuty payloads, but:
 
-```python
-from pyblastradius.api import SlackIntegration
+- neither is exposed to the Python package — `from pyblastradius.api import
+  SlackIntegration` raises `ModuleNotFoundError`, there is no
+  `pyblastradius.api` module
+- even on the Rust side, the actual HTTP calls are commented out; every
+  method returns `Ok(())` (or a hardcoded fake incident id) without sending
+  anything
 
-slack = SlackIntegration("https://hooks.slack.com/services/...")
-slack.send_blast_radius_alert(
-    "payment-service",
-    blast_score=0.95,
-    affected_services=[...]
-)
-```
-
-### Incident Management
-
-```python
-from pyblastradius.api import PagerDutyIntegration
-
-pd = PagerDutyIntegration("integration_key")
-incident_id = pd.create_incident(
-    "database-failure",
-    blast_score=0.98,
-    description="Critical database cascade detected"
-)
-```
+This is tracked as a known gap, not a working feature. If you need
+Slack/PagerDuty alerting today, call their APIs directly with the analysis
+results from `BlastRadiusAnalyzer`/`Simulator`.
 
 ## Performance
 
-| Operation | Target | Status |
-|-----------|--------|--------|
-| Dependency discovery (1000 nodes) | <2 min | ✅ |
-| Blast radius analysis | <100ms | ✅ |
-| Criticality scoring (all nodes) | <500ms | ✅ |
-| Graph visualization export | <1s | ✅ |
-| End-to-end scan → analyze → alert | <5 min | ✅ |
+No benchmarks have been run against this release. Numbers below are
+targets, not measurements — treat them as design goals, not verified
+performance. `cargo bench` benchmark scaffolding exists in the crate but
+results aren't published here yet.
+
+| Operation | Target |
+|-----------|--------|
+| Dependency discovery (1000 nodes) | <2 min |
+| Blast radius analysis | <100ms |
+| Criticality scoring (all nodes) | <500ms |
+| Graph visualization export | <1s |
+| End-to-end scan → analyze → alert | <5 min |
 
 ## Project Status
 
@@ -274,9 +295,8 @@ incident_id = pd.create_incident(
 | Phase 3 | Config & YAML | ✅ Complete | blastradius.yml support |
 | Phase 4 | CI/CD Integration | ✅ Complete | GitHub Actions workflow |
 | Phase 5 | Examples & Documentation | ✅ Complete | Working examples, configs |
-| Phase 6 | REST API Server | ✅ Complete | FastAPI endpoints + OpenAPI |
-| v0.1.0 | Public MVP Release | 🚀 Ready | All 10 input methods working |
-| v0.2.0 | Enhanced Config | 📋 Planned | Q3 2026 |
+| Phase 6 | REST API Server | ✅ Complete | FastAPI endpoints + OpenAPI, real API-key auth, explicit CORS allowlist |
+| v0.2.0 | Working Rust↔Python bindings | ✅ Shipped | `pyblastradius._core` extension module, real end-to-end analysis, first-ever working `import pyblastradius`; discovery engines still not implemented (see Platform Support) |
 | v1.0.0 | Enterprise Edition | 📋 Planned | Q1 2027 |
 
 ## Contributing
