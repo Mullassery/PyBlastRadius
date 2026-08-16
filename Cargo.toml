@@ -15,6 +15,10 @@ categories = ["development-tools", "command-line-utilities"]
 [lib]
 name = "pyblastradius"
 path = "src/lib.rs"
+# cdylib is required so `maturin` can build this as a Python extension module
+# (pyblastradius._core); rlib is kept so `cargo test`/`cargo bench`/other
+# Rust crates can still depend on this crate as a normal library.
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Graph & data structures
@@ -69,7 +73,15 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # Python bindings (maturin)
-pyo3 = { version = "0.23", features = ["extension-module"] }
+# NOTE: "extension-module" is intentionally NOT enabled here. That feature
+# tells pyo3 to skip linking against libpython (because a real Python
+# extension gets its Python symbols from the host interpreter that loads
+# it), which breaks plain `cargo build`/`cargo test` binaries (they are not
+# loaded by a Python interpreter, so unresolved symbols fail to link/run).
+# maturin auto-detects that this crate depends on pyo3 without
+# "extension-module" and passes `--features pyo3/extension-module` itself
+# when building the wheel, so `maturin build`/`develop` still work.
+pyo3 = { version = "0.23" }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

@@ -9,6 +9,7 @@ pub mod utils;
 pub mod error;
 pub mod api;
 pub mod integrations;
+mod python;
 
 pub use graph::{Graph, Node, Edge, NodeType, EdgeType};
 pub use graph::serialization::{GraphExporter, GraphImporter, ExportFormat};
