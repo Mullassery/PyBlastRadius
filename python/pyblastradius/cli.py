@@ -16,6 +16,8 @@ from . import (
     OtelDiscoverer,
     BlastRadiusAnalyzer,
     CriticalityScorer,
+    Simulator,
+    FailureType,
     Graph,
 )
 from .discovery import Discoverer
@@ -100,7 +102,7 @@ class LocalDiscoverer(Discoverer):
             try:
                 sub_graph = discoverer.discover()
                 if sub_graph.node_count() > 0:
-                    graph = Graph.merge([graph, sub_graph])
+                    graph.merge(sub_graph)
                     found_any = True
                     console.print(f"  ✓ {name}: {sub_graph.node_count()} nodes")
             except Exception as e:
@@ -139,7 +141,7 @@ def scan(sources: tuple, output: str, verbose: bool):
                         scheme, params = UriParser.parse(source_uri)
                         discoverer = UriParser.create_discoverer(scheme, params)
                         sub_graph = discoverer.discover()
-                        graph = Graph.merge([graph, sub_graph])
+                        graph.merge(sub_graph)
 
                         if verbose:
                             console.print(f"  ✓ {scheme}: {sub_graph.node_count()} nodes")
@@ -176,34 +178,57 @@ def analyze(graph_file: str, service: str, max_depth: int, format: str):
         with open(graph_file) as f:
             graph = Graph.from_json(f.read())
 
-        # Run analysis
-        analyzer = BlastRadiusAnalyzer(graph)
-        result = analyzer.analyze(service, max_depth=max_depth)
+        # Resolve the human-readable --service name to the node id the
+        # Rust engine keys on.
+        node = graph.find_node_by_name(service)
+        if node is None:
+            raise ValueError(f"No node named '{service}' found in {graph_file}")
+
+        # Run analysis (real Rust engine, via pyblastradius._core)
+        result = BlastRadiusAnalyzer.analyze(graph, node.id, max_depth=max_depth)
+        score = result.blast_radius_score / 100.0
+
+        def resolve_names(node_ids):
+            names = []
+            for nid in node_ids:
+                n = graph.get_node(nid)
+                names.append(n.name if n else nid)
+            return names
+
+        directly_impacted = resolve_names(result.directly_impacted)
+        indirectly_impacted = resolve_names(result.indirectly_impacted + result.tertiary_impacted)
 
         # Output
         if format == "json":
-            click.echo(json.dumps(result.to_dict(), indent=2))
+            click.echo(json.dumps({
+                "service": service,
+                "score": score,
+                "directly_impacted": directly_impacted,
+                "indirectly_impacted": indirectly_impacted,
+                "total_impacted": result.total_impacted,
+                "critical_path_count": result.critical_path_count,
+            }, indent=2))
         elif format == "csv":
             # CSV output
             click.echo(f"service,score,directly_impacted,indirectly_impacted")
-            click.echo(f"{service},{result.score:.2f},{len(result.directly_impacted)},{len(result.indirectly_impacted)}")
+            click.echo(f"{service},{score:.2f},{len(directly_impacted)},{len(indirectly_impacted)}")
         else:
             # Table output
             table = Table(title=f"Blast Radius Analysis: {service}")
             table.add_column("Metric", style="cyan")
             table.add_column("Value", style="green")
 
-            table.add_row("Blast Radius Score", f"{result.score:.1%}")
-            table.add_row("Risk Level", get_risk_level(result.score))
-            table.add_row("Directly Impacted", str(len(result.directly_impacted)))
-            table.add_row("Indirectly Impacted", str(len(result.indirectly_impacted)))
+            table.add_row("Blast Radius Score", f"{score:.1%}")
+            table.add_row("Risk Level", get_risk_level(score))
+            table.add_row("Directly Impacted", str(len(directly_impacted)))
+            table.add_row("Indirectly Impacted", str(len(indirectly_impacted)))
 
             console.print(table)
 
-            if result.directly_impacted:
+            if directly_impacted:
                 console.print("\n[bold]Directly Impacted Services:[/bold]")
-                for node in result.directly_impacted[:5]:
-                    console.print(f"  • {node}")
+                for name in directly_impacted[:5]:
+                    console.print(f"  • {name}")
 
     except Exception as e:
         console.print(f"❌ Error: {str(e)}", style="red")
@@ -221,14 +246,22 @@ def criticality(graph_file: str, limit: int, format: str):
         with open(graph_file) as f:
             graph = Graph.from_json(f.read())
 
-        # Score
-        scorer = CriticalityScorer(graph)
-        scores = [(node, scorer.score(node)) for node in graph.services()]
-        scores.sort(key=lambda x: x[1], reverse=True)
+        # Score (real Rust engine, via pyblastradius._core). score_all()
+        # already returns results sorted by criticality_score descending.
+        #
+        # NOTE: despite its Rust doc comment claiming a "0-100" scale,
+        # CriticalityScore.criticality_score is actually computed on a 0-1
+        # scale (see src/analysis/criticality.rs: the weighted components
+        # are summed then divided by 100.0). Treat it as already-normalized
+        # here - do not divide by 100 again.
+        scores = CriticalityScorer.score_all(graph)[:limit]
 
         # Output
         if format == "json":
-            data = [{"service": node, "score": score} for node, score in scores[:limit]]
+            data = [
+                {"service": s.node_name, "score": s.criticality_score}
+                for s in scores
+            ]
             click.echo(json.dumps(data, indent=2))
         else:
             table = Table(title="Service Criticality Ranking")
@@ -236,14 +269,28 @@ def criticality(graph_file: str, limit: int, format: str):
             table.add_column("Criticality Score", style="green")
             table.add_column("Risk Level", style="yellow")
 
-            for node, score in scores[:limit]:
-                table.add_row(node, f"{score:.1%}", get_risk_level(score))
+            for s in scores:
+                table.add_row(
+                    s.node_name,
+                    f"{s.criticality_score:.1%}",
+                    get_risk_level(s.criticality_score),
+                )
 
             console.print(table)
 
     except Exception as e:
         console.print(f"❌ Error: {str(e)}", style="red")
         sys.exit(1)
+
+
+_SCENARIO_TO_FAILURE_TYPE = {
+    "cascade": FailureType.Outage,
+    "outage": FailureType.Outage,
+    "degradation": FailureType.Degradation,
+    "high-latency": FailureType.HighLatency,
+    "high-error-rate": FailureType.HighErrorRate,
+    "data-quality": FailureType.DataQualityIssue,
+}
 
 
 @cli.command()
@@ -257,27 +304,31 @@ def simulate(graph_file: str, target: str, scenario: str):
         with open(graph_file) as f:
             graph = Graph.from_json(f.read())
 
+        node = graph.find_node_by_name(target)
+        if node is None:
+            raise ValueError(f"No node named '{target}' found in {graph_file}")
+
+        failure_type = _SCENARIO_TO_FAILURE_TYPE.get(scenario.lower())
+        if failure_type is None:
+            raise ValueError(
+                f"Unknown scenario '{scenario}'. Choose one of: "
+                f"{', '.join(sorted(_SCENARIO_TO_FAILURE_TYPE))}"
+            )
+
         console.print(f"🔴 Simulating {target} failure...")
         console.print(f"📊 Scenario: {scenario}")
 
-        # Simple cascade simulation
-        impacted = set([target])
-        queue = [target]
+        # Real Rust engine cascade simulation (pyblastradius._core.Simulator)
+        result = Simulator.simulate(graph, node.id, failure_type)
 
-        while queue:
-            current = queue.pop(0)
-            # Find dependent services
-            for edge in graph.edges():
-                if edge.source == current and edge.target not in impacted:
-                    impacted.add(edge.target)
-                    queue.append(edge.target)
+        console.print(f"\n⚠️  Impacted Services: {result.estimated_impact_nodes}")
+        for service in sorted(result.affected_services):
+            console.print(f"  • {service}")
 
-        console.print(f"\n⚠️  Impacted Services: {len(impacted) - 1}")
-        for service in sorted(impacted):
-            if service != target:
-                console.print(f"  • {service}")
-
-        console.print(f"\n⏱️  Estimated Recovery Time: 45-120 minutes")
+        console.print(
+            f"\n⏱️  Estimated Recovery Time: {result.estimated_recovery_time_minutes} minutes"
+        )
+        console.print(f"💰 Business Impact Score: {result.business_impact_score:.1f}")
 
     except Exception as e:
         console.print(f"❌ Error: {str(e)}", style="red")
@@ -332,7 +383,7 @@ def get_risk_level(score: float) -> str:
 def generate_interactive_html(graph: Graph) -> str:
     """Generate interactive HTML visualization"""
     # Simple HTML with graph data
-    nodes = [{"id": node, "label": node} for node in graph.services()]
+    nodes = [{"id": node.id, "label": node.name} for node in graph.nodes()]
     edges = [{"source": e.source, "target": e.target} for e in graph.edges()]
 
     return f"""<!DOCTYPE html>

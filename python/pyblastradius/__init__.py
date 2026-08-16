@@ -16,12 +16,22 @@ Quick start:
     print(f"Blast radius score: {result.blast_radius_score:.1f}/100")
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "Georgi Mammen Mullassery"
 __email__ = "mullassery@gmail.com"
 __license__ = "Proprietary License — Free to use with explicit attribution"
 
-# Core exports
+# Core exports - real Rust engine, via the `pyblastradius._core` pyo3
+# extension module (see src/python.rs). BlastRadiusAnalyzer, CriticalityScorer
+# and Simulator here are the actual petgraph-backed implementations, not
+# Python reimplementations: every call crosses into Rust.
+#
+# NOTE: prior to this fix, this module re-exported *Python* stand-ins for
+# BlastRadiusAnalyzer/CriticalityScorer/Simulator from pyblastradius.analysis
+# that shadowed these real bindings and crashed on first use (they called a
+# `Graph.services()` method that has never existed on the Rust `Graph`
+# class). That was a wiring bug, not a Rust bug - the real engine
+# (verified via src/python.rs) was reachable and correct the whole time.
 try:
     from pyblastradius._core import (
         Graph,
@@ -29,6 +39,14 @@ try:
         Edge,
         NodeType,
         EdgeType,
+        HealthStatus,
+        FailureType,
+        BlastRadiusResult,
+        CriticalityScore,
+        SimulationResult,
+        BlastRadiusAnalyzer,
+        CriticalityScorer,
+        Simulator,
     )
 except ImportError:
     # Fallback if Rust bindings not available (development mode)
@@ -37,6 +55,14 @@ except ImportError:
     Edge = None
     NodeType = None
     EdgeType = None
+    HealthStatus = None
+    FailureType = None
+    BlastRadiusResult = None
+    CriticalityScore = None
+    SimulationResult = None
+    BlastRadiusAnalyzer = None
+    CriticalityScorer = None
+    Simulator = None
 
 # Python-only exports
 from pyblastradius.discovery import (
@@ -46,9 +72,6 @@ from pyblastradius.discovery import (
     OtelDiscoverer,
 )
 from pyblastradius.analysis import (
-    BlastRadiusAnalyzer,
-    CriticalityScorer,
-    Simulator,
     AnomalyDetector,
     HiddenDependencyDetector,
 )
@@ -59,21 +82,27 @@ from pyblastradius.integrations import (
 )
 
 __all__ = [
-    # Core
+    # Core (Rust engine)
     "Graph",
     "Node",
     "Edge",
     "NodeType",
     "EdgeType",
+    "HealthStatus",
+    "FailureType",
+    "BlastRadiusResult",
+    "CriticalityScore",
+    "SimulationResult",
+    "BlastRadiusAnalyzer",
+    "CriticalityScorer",
+    "Simulator",
     # Discovery
     "KubernetesDiscoverer",
     "TerraformDiscoverer",
     "AirflowDiscoverer",
     "OtelDiscoverer",
-    # Analysis
-    "BlastRadiusAnalyzer",
-    "CriticalityScorer",
-    "Simulator",
+    # Analysis (Python-only, not backed by the Rust engine - see
+    # pyblastradius/analysis.py docstrings for current limitations)
     "AnomalyDetector",
     "HiddenDependencyDetector",
     # Integrations
