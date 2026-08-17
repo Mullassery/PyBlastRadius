@@ -25,7 +25,7 @@ Not yet implemented (present as scaffolding/placeholders, listed here so you don
 - **Hidden Dependency Detection / Anomaly Detection** — `HiddenDependencyDetector` and `AnomalyDetector` always return empty results; they are not wired to any metrics/trace source.
 - **`pyblastradius.integrations`** — `OtelCollectorClient` and `StatGuardianClient` are placeholders that return empty/fake data; `DbtManifestParser` genuinely parses a dbt `manifest.json` you already have on disk and is real.
 - **GraphQL API** — not exposed anywhere; the Rust crate has a query-string builder (`src/api/graphql.rs`) that nothing serves or executes.
-- **Slack/PagerDuty integrations** — the Rust structs (`src/api/integrations.rs`) build correct payloads but never send them (the HTTP calls are commented out), and are not exposed to Python at all yet.
+- **Chat and incident-management integrations** — the Rust structs (`src/api/integrations.rs`) build correct webhook payloads for chat notifications and incident-management alerting, but never send them (the HTTP calls are commented out), and are not exposed to Python at all yet.
 
 ## Quick Start
 
@@ -185,7 +185,7 @@ data today (see Features above for the exact status of each piece).
 ## Why PyBlastRadius?
 
 ### Problem
-- SRE teams spend **4-24 hours** on MTTR manually tracing dependencies
+- SRE teams often spend hours manually tracing dependencies during an incident
 - Existing tools answer "What broke?" but not "What will break next?"
 - Business impact is guesswork, not data-driven
 - Data quality issues cascade invisibly through pipelines
@@ -199,10 +199,12 @@ PyBlastRadius provides:
 - **Open-source first** — works with any observability backend
 
 ### Value (aspirational — not yet measured on real deployments)
-- **50%+ MTTR reduction** through automated dependency discovery, once discovery is implemented
-- **$705K+ per prevented incident** (illustrative, based on $15K/min downtime)
-- **99% cost savings** vs proprietary tools (OTel vs Datadog)
-- **Zero vendor lock-in** with open-source stack
+- **Faster MTTR** through automated dependency discovery, once discovery is implemented
+- **Illustrative cost-of-incident math** (e.g. $705K+ per prevented incident, based on an
+  assumed $15K/min of downtime) to help build a business case — not a measured result
+- **Lower cost than commercial observability platforms** by building on the open-source
+  OpenTelemetry ecosystem instead of a proprietary SaaS backend
+- **Zero vendor lock-in** with an open-source stack
 
 These are the goals the project is designed around, not measured results —
 there are no discovery engines wired up yet to generate the "automated
@@ -216,12 +218,12 @@ Discovery source integration status (i.e. what `pyblastradius scan` /
 
 | Discovery Source | Status | Notes |
 |-----------------|--------|----------|
-| Kubernetes | 🚧 Not implemented | `discover()` always returns an empty graph; no manifest parsing or API calls |
-| Terraform | 🚧 Not implemented | `discover()` always returns an empty graph; no HCL parsing |
-| Airflow | 🚧 Not implemented | `discover()` always returns an empty graph |
-| OpenTelemetry | 🚧 Not implemented | `discover()` always returns an empty graph (there is a separate, real Rust OTLP client used by `examples/cli.rs`, but it is not exposed to the Python package) |
-| dbt | ✅ Partial | `DbtManifestParser` genuinely parses a local `manifest.json` for column lineage |
-| StatGuardian | 🚧 Not implemented | `StatGuardianClient` returns empty/hardcoded fake data |
+| Kubernetes | Not implemented | `discover()` always returns an empty graph; no manifest parsing or API calls |
+| Terraform | Not implemented | `discover()` always returns an empty graph; no HCL parsing |
+| Airflow | Not implemented | `discover()` always returns an empty graph |
+| OpenTelemetry | Not implemented | `discover()` always returns an empty graph (there is a separate, real Rust OTLP client used by `examples/cli.rs`, but it is not exposed to the Python package) |
+| dbt | Partial | `DbtManifestParser` genuinely parses a local `manifest.json` for column lineage |
+| StatGuardian | Not implemented | `StatGuardianClient` returns empty/hardcoded fake data |
 
 What **is** real and working: build a `Graph` directly via the Python API
 (`Graph`, `Node`, `Edge`) or load one from JSON, then run
@@ -255,20 +257,19 @@ from a live collector or StatGuardian instance.
 
 ## Integrations
 
-**Not usable from Python today.** The Rust crate has `SlackIntegration` and
-`PagerDutyIntegration` structs (`src/api/integrations.rs`) that build
-correct Slack/PagerDuty payloads, but:
+**Not usable from Python today.** The Rust crate has integration structs
+(`src/api/integrations.rs`) that build correct webhook payloads for chat
+notifications and incident-management alerting, but:
 
-- neither is exposed to the Python package — `from pyblastradius.api import
-  SlackIntegration` raises `ModuleNotFoundError`, there is no
-  `pyblastradius.api` module
+- neither is exposed to the Python package — the equivalent Python import
+  raises `ModuleNotFoundError`, there is no `pyblastradius.api` module
 - even on the Rust side, the actual HTTP calls are commented out; every
   method returns `Ok(())` (or a hardcoded fake incident id) without sending
   anything
 
-This is tracked as a known gap, not a working feature. If you need
-Slack/PagerDuty alerting today, call their APIs directly with the analysis
-results from `BlastRadiusAnalyzer`/`Simulator`.
+This is tracked as a known gap, not a working feature. If you need alerting
+today, call your chat or incident-management provider's API directly with
+the analysis results from `BlastRadiusAnalyzer`/`Simulator`.
 
 ## Performance
 
@@ -289,15 +290,31 @@ results aren't published here yet.
 
 | Phase | Release | Status | Delivered |
 |-------|---------|--------|-----------|
-| Phase 0 | Research & Planning | ✅ Complete | Architecture, personas, roadmap |
-| Phase 1 | Foundation (Graph + Analysis) | ✅ Complete | Core graph engine, algorithms |
-| Phase 2 | CLI Implementation | ✅ Complete | Full CLI with all commands |
-| Phase 3 | Config & YAML | ✅ Complete | blastradius.yml support |
-| Phase 4 | CI/CD Integration | ✅ Complete | GitHub Actions workflow |
-| Phase 5 | Examples & Documentation | ✅ Complete | Working examples, configs |
-| Phase 6 | REST API Server | ✅ Complete | FastAPI endpoints + OpenAPI, real API-key auth, explicit CORS allowlist |
-| v0.2.0 | Working Rust↔Python bindings | ✅ Shipped | `pyblastradius._core` extension module, real end-to-end analysis, first-ever working `import pyblastradius`; discovery engines still not implemented (see Platform Support) |
-| v1.0.0 | Enterprise Edition | 📋 Planned | Q1 2027 |
+| Phase 0 | Research & Planning | Complete | Architecture, personas, roadmap |
+| Phase 1 | Foundation (Graph + Analysis) | Complete | Core graph engine, algorithms |
+| Phase 2 | CLI Implementation | Complete | Full CLI with all commands |
+| Phase 3 | Config & YAML | Complete | blastradius.yml support |
+| Phase 4 | CI/CD Integration | Complete | GitHub Actions workflow |
+| Phase 5 | Examples & Documentation | Complete | Working examples, configs |
+| Phase 6 | REST API Server | Complete | FastAPI endpoints + OpenAPI, real API-key auth, explicit CORS allowlist |
+| v0.2.0 | Working Rust-Python bindings | Shipped | `pyblastradius._core` extension module, real end-to-end analysis, first-ever working `import pyblastradius`; discovery engines still not implemented (see Platform Support) |
+| v1.0.0 | Enterprise Edition | Planned | Q1 2027 |
+
+## Known Issues
+
+No issues are currently open in the GitHub tracker. The gaps below are the ones found by
+reading the source directly; the Features, Platform Support, API Examples, and Integrations
+sections above give the full detail on each:
+
+- Dependency discovery (`pyblastradius scan` and the `*Discoverer` classes) always returns an
+  empty graph — no Kubernetes/Terraform/Airflow/OTLP parsing is implemented yet.
+- `HiddenDependencyDetector` and `AnomalyDetector` always return empty results.
+- `OtelCollectorClient` and `StatGuardianClient` return empty/hardcoded placeholder data, not
+  live results.
+- The GraphQL query-string builder in the Rust crate is not served anywhere; there is no
+  GraphQL endpoint.
+- The chat/incident-management integration structs in the Rust crate build correct payloads
+  but never send them, and are not exposed to Python.
 
 ## Contributing
 
@@ -384,6 +401,6 @@ Built on proven open-source foundations:
 
 ---
 
-**Made with ⚡ by Georgi Mammen Mullassery**
+**Made by Georgi Mammen Mullassery**
 
 [GitHub](https://github.com/Mullassery/PyBlastRadius) · [Documentation](docs/) · [Issues](https://github.com/Mullassery/PyBlastRadius/issues)
