@@ -44,15 +44,27 @@ impl ColumnLineageTracker {
         target: String,
         transformation: Option<String>,
     ) -> Result<()> {
+        // Column identifiers are "schema.table.column" -- split off only the
+        // final segment as the column name, keeping "schema.table" intact as
+        // the table identifier. find_downstream_impact() reconstructs
+        // "{table}.{column}" to match against a caller-supplied fully
+        // qualified column name, so collapsing to just the first segment
+        // (as `.split('.').next()` did) silently dropped the table segment
+        // and made that reconstruction never match a real 3-part identifier.
+        let (source_table, source_column) =
+            source.rsplit_once('.').unwrap_or(("", source.as_str()));
+        let (target_table, target_column) =
+            target.rsplit_once('.').unwrap_or(("", target.as_str()));
+
         let key = format!("{}_{}_to_{}", source, target, target);
         self.lineage_map
             .entry(key)
             .or_default()
             .push(ColumnDependency {
-                source_table: source.split('.').next().unwrap_or("").to_string(),
-                source_column: source.split('.').next_back().unwrap_or("").to_string(),
-                target_table: target.split('.').next().unwrap_or("").to_string(),
-                target_column: target.split('.').next_back().unwrap_or("").to_string(),
+                source_table: source_table.to_string(),
+                source_column: source_column.to_string(),
+                target_table: target_table.to_string(),
+                target_column: target_column.to_string(),
                 transformation,
             });
 

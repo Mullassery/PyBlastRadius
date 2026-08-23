@@ -200,18 +200,43 @@ mod tests {
     fn test_hidden_dependency_detection() {
         let mut graph = Graph::new();
 
+        // detect_from_trace_gaps only fires for a node with > 3 downstream
+        // neighbors (see its doc comment above), and only reports a hidden
+        // dependency toward a target whose name matches an async keyword
+        // ("worker", "job", "scheduler", "queue", "consumer", "handler").
+        // The original fixture (1 node, 1 edge) never met either condition,
+        // so this test always passed vacuously against an always-empty
+        // result until it was accidentally asserting on real detection
+        // logic for the first time (see this repo's CI-fix history) --
+        // give api-gateway enough real fan-out to actually exercise it.
         let n1 = graph.add_node(Node::service("api-gateway")).unwrap();
         let n2 = graph.add_node(Node::service("background-worker")).unwrap();
         let n3 = graph.add_node(Node::database("postgres")).unwrap();
+        let n4 = graph.add_node(Node::service("cache")).unwrap();
+        let n5 = graph.add_node(Node::service("auth-service")).unwrap();
 
         graph
+            .add_edge(crate::graph::Edge::new(EdgeType::Calls, n1, n2))
+            .unwrap();
+        graph
             .add_edge(crate::graph::Edge::new(EdgeType::Calls, n1, n3))
+            .unwrap();
+        graph
+            .add_edge(crate::graph::Edge::new(EdgeType::Calls, n1, n4))
+            .unwrap();
+        graph
+            .add_edge(crate::graph::Edge::new(EdgeType::Calls, n1, n5))
             .unwrap();
 
         let hidden = HiddenDependencyDetector::detect(&graph).unwrap();
 
-        // Should find some hidden dependencies
+        // api-gateway now has 4 downstream neighbors (> 3), and one of them
+        // ("background-worker") matches the async-keyword heuristic, so a
+        // real hidden dependency should be reported.
         assert!(!hidden.is_empty());
+        assert!(hidden
+            .iter()
+            .any(|dep| dep.source == n1 && dep.target == n2));
     }
 
     #[test]
