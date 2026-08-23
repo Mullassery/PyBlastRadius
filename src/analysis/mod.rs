@@ -52,8 +52,17 @@ mod tests {
     #[test]
     fn test_blast_radius_analysis() {
         let graph = create_sample_graph();
-        let nodes: Vec<_> = graph.nodes().map(|n| n.id).collect();
-        let start = nodes[0];
+        // graph.nodes() iterates a HashMap, so its order isn't stable
+        // across runs -- picking nodes[0] blindly meant this test only
+        // passed when iteration order happened to land on "api-server"
+        // (which has outgoing edges) rather than "postgresql" or "redis"
+        // (both leaves with none), making it flaky by construction. Look
+        // up the specific node this test actually means to start from.
+        let start = graph
+            .nodes()
+            .find(|n| n.name == "api-server")
+            .map(|n| n.id)
+            .expect("api-server node must exist in the sample graph");
 
         let result = BlastRadiusAnalyzer::analyze(&graph, start).unwrap();
         assert!(result.directly_impacted.len() > 0);
