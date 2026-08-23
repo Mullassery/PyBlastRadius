@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-08-23
+
+### Fixed
+
+- `CriticalityScorer`: `criticality_score` was divided by 100 twice, collapsing the
+  documented 0-100 scale down to ~0-1. Fixed the double-division.
+- `CriticalityScorer::is_single_point_of_failure`: checked a node's *predecessor's*
+  out-degree instead of the node's own in-degree, producing false negatives on branching
+  topologies (a node with exactly one predecessor was missed as a SPOF if that predecessor
+  also happened to reach other nodes). Fixed to check in-degree directly; added a
+  regression test for the branching case.
+- `ColumnLineageTracker::track_column` split `"schema.table.column"` identifiers into only
+  their first and last dot-separated segments, discarding the middle table segment --
+  `find_downstream_impact()` could never match a real 3-part identifier as a result. Fixed
+  with `rsplit_once('.')`.
+- `test_hidden_dependency_detection`'s fixture graph never met
+  `detect_from_trace_gaps`'s own documented threshold (a node needs > 3 downstream
+  neighbors), so it asserted on an always-empty result regardless of whether detection
+  actually worked. Gave the fixture a graph that genuinely exercises the heuristic.
+- `test_blast_radius_analysis` picked its start node via `nodes[0]` after collecting
+  `graph.nodes()` (backed by a `HashMap`, whose iteration order isn't stable across
+  process runs) into a `Vec` -- flaky depending on which node landed at index 0. Now looks
+  up the intended node by name.
+- CI: replaced the archived `actions-rs/toolchain` action (broken/unmaintained) with
+  `dtolnay/rust-toolchain@stable` across all jobs; bumped `actions/checkout`,
+  `actions/cache`, `actions/upload-artifact`, and `codecov-action` to current major
+  versions; pinned Python 3.12 in the Build job (macos-latest's default python3 recently
+  became 3.14, which PyO3 0.23.5 rejects); marked the README's ASCII architecture diagram
+  as a `text` fence instead of an implicit (and invalid) Rust doctest.
+- `cargo fmt`/`cargo clippy -D warnings` had never actually run cleanly before (blocked by
+  the broken CI action above) -- fixed ~50 real warnings surfaced once they could run.
+
+No public API changes.
+
 ## [Unreleased]
 
 ### Planned

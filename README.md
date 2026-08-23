@@ -308,7 +308,11 @@ sections above give the full detail on each:
 
 - Dependency discovery (`pyblastradius scan` and the `*Discoverer` classes) always returns an
   empty graph — no Kubernetes/Terraform/Airflow/OTLP parsing is implemented yet.
-- `HiddenDependencyDetector` and `AnomalyDetector` always return empty results.
+- `HiddenDependencyDetector` is a mix: `detect_from_trace_gaps` (fan-out + async-keyword
+  heuristic) and `detect_semantic_coupling` (name-similarity heuristic) are real logic, not
+  stubs — but two of its four methods, `detect_from_query_logs` and `detect_from_config`, are
+  explicit MVP stubs that always return empty (see their own doc comments). `AnomalyDetector`
+  always returns empty results.
 - `OtelCollectorClient` and `StatGuardianClient` return empty/hardcoded placeholder data, not
   live results.
 - The GraphQL query-string builder in the Rust crate is not served anywhere; there is no
