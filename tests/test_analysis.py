@@ -68,6 +68,52 @@ def test_criticality_scorer_flags_single_point_of_failure(sample_graph):
     assert ordered == sorted(ordered, reverse=True)
 
 
+def test_criticality_scorer_spof_detection_on_branching_topology():
+    """Regression test for a false-negative SPOF bug: a node was only
+    flagged as a single point of failure if its sole predecessor *also* had
+    no other outgoing edges. That misses real SPOFs whenever the
+    predecessor branches to other nodes too.
+
+    `sample_graph`'s linear chain (api-server -> auth-service ->
+    postgresql) doesn't exercise this: auth-service has exactly one
+    outgoing edge, so even the buggy implementation got it right there.
+    This fixture adds a genuine branch so the predecessor fans out while
+    the node under test still has only one way in.
+
+    Topology:
+        root -> a -> leaf   (leaf's only path in is through a)
+        root -> b
+        a    -> b           (b is reachable both via root and via a)
+    """
+    graph = pbr.Graph()
+
+    root = pbr.Node("root", pbr.NodeType.Service)
+    a = pbr.Node("a", pbr.NodeType.Service)
+    b = pbr.Node("b", pbr.NodeType.Service)
+    leaf = pbr.Node("leaf", pbr.NodeType.Service)
+
+    ids = {
+        "root": graph.add_node(root),
+        "a": graph.add_node(a),
+        "b": graph.add_node(b),
+        "leaf": graph.add_node(leaf),
+    }
+
+    graph.add_edge(pbr.Edge(pbr.EdgeType.Calls, ids["root"], ids["a"]))
+    graph.add_edge(pbr.Edge(pbr.EdgeType.Calls, ids["root"], ids["b"]))
+    graph.add_edge(pbr.Edge(pbr.EdgeType.Calls, ids["a"], ids["b"]))
+    graph.add_edge(pbr.Edge(pbr.EdgeType.Calls, ids["a"], ids["leaf"]))
+
+    scores = {s.node_name: s for s in pbr.CriticalityScorer.score_all(graph)}
+
+    # `leaf` has exactly one predecessor (a), even though `a` also branches
+    # to `b` -> `leaf` is a real SPOF.
+    assert scores["leaf"].is_single_point_of_failure is True
+
+    # `b` has two independent predecessors (root and a) -> not a SPOF.
+    assert scores["b"].is_single_point_of_failure is False
+
+
 def test_criticality_scorer_score_node_matches_score_all(sample_graph):
     graph, ids = sample_graph
     single = pbr.CriticalityScorer.score_node(graph, ids["postgresql"])
