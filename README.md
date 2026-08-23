@@ -13,7 +13,7 @@
 Working today, backed by the real Rust engine (`pyblastradius._core`):
 
 - **Blast Radius Analysis** — BFS-based impact categorization (direct, indirect, tertiary), via `BlastRadiusAnalyzer`
-- **Criticality Scoring** — Risk-weighted ranking using downstream dependencies, recovery time, business exposure, via `CriticalityScorer`
+- **Criticality Scoring** — Risk-weighted ranking using downstream dependencies, recovery time, business exposure, via `CriticalityScorer` (has known scoring-scale and SPOF-detection bugs — see Known Issues)
 - **Cascade Simulation** — Simulate outage/degradation/high-latency/high-error-rate/data-quality failures and estimate recovery time and business impact, via `Simulator`
 - **Graph import/export** — JSON round-trip and Graphviz DOT export
 - **REST API server** — FastAPI server with real bearer-token auth and an explicit CORS allowlist (`pyblastradius server`)
@@ -315,6 +315,21 @@ sections above give the full detail on each:
   GraphQL endpoint.
 - The chat/incident-management integration structs in the Rust crate build correct payloads
   but never send them, and are not exposed to Python.
+- `CriticalityScorer` has two verified correctness bugs in the Rust engine (confirmed by
+  failing `cargo test --lib` runs in CI, not just a hypothetical): `criticality_score` is
+  divided by 100 twice, so returned scores land in a ~0–1 range instead of the intended
+  0–100 scale, and `is_single_point_of_failure` has a false-negative edge case — a node with
+  exactly one predecessor is only flagged as a SPOF if that predecessor *also* has no other
+  outgoing edges, so a predecessor that calls multiple things suppresses the flag even when
+  the target genuinely has no redundant path in. Ranking (relative order) and the simple
+  chain topology in the README's own Python API example are unaffected, but don't rely on
+  absolute score values or on SPOF detection in branching topologies yet.
+
+As of this writing, GitHub Actions CI (`ci.yml`) is red on `main`, driven by the
+`CriticalityScorer` test failures above plus an unrelated data-quality/column-lineage test
+failure in Rust-internal code that isn't exposed to Python or claimed anywhere in this
+README. Check the [Actions tab](https://github.com/Mullassery/PyBlastRadius/actions) for
+current status rather than trusting the badge at the top of this file in isolation.
 
 ## Contributing
 
