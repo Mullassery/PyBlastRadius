@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::graph::{Graph, Node, Edge, NodeType, EdgeType};
+use crate::graph::{Edge, EdgeType, Graph, Node, NodeType};
 use std::collections::HashMap;
 use walkdir::WalkDir;
 
@@ -35,7 +35,7 @@ impl TerraformDiscoverer {
         for entry in WalkDir::new(&self.root_dir)
             .into_iter()
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |ext| ext == "tf"))
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "tf"))
         {
             self.parse_file(entry.path(), graph, node_map)?;
         }
@@ -52,8 +52,9 @@ impl TerraformDiscoverer {
         // For MVP: Use simple regex parsing instead of full HCL parser
         // Real implementation would use hcl2 or similar crate
 
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| crate::error::Error::parse_error(format!("Failed to read {}: {}", path.display(), e)))?;
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            crate::error::Error::parse_error(format!("Failed to read {}: {}", path.display(), e))
+        })?;
 
         // Extract resource definitions
         self.extract_resources(&content, graph, node_map)?;
@@ -93,7 +94,10 @@ impl TerraformDiscoverer {
                         .add_discovered_via("terraform-cache");
 
                     let node_id = graph.add_node(node)?;
-                    node_map.insert(format!("aws_elasticache_cluster.{}", name.as_str()), node_id);
+                    node_map.insert(
+                        format!("aws_elasticache_cluster.{}", name.as_str()),
+                        node_id,
+                    );
                 }
             }
         }
@@ -124,14 +128,32 @@ impl TerraformDiscoverer {
         // For MVP: hardcode common patterns from example infrastructure
 
         let dependencies = vec![
-            ("aws_ecs_service.api_gateway", "aws_ecs_service.auth_service", EdgeType::Calls),
-            ("aws_ecs_service.auth_service", "aws_db_instance.production", EdgeType::Queries),
-            ("aws_ecs_service.auth_service", "aws_elasticache_cluster.redis", EdgeType::Calls),
-            ("aws_ecs_service.payment_service", "aws_db_instance.production", EdgeType::Queries),
+            (
+                "aws_ecs_service.api_gateway",
+                "aws_ecs_service.auth_service",
+                EdgeType::Calls,
+            ),
+            (
+                "aws_ecs_service.auth_service",
+                "aws_db_instance.production",
+                EdgeType::Queries,
+            ),
+            (
+                "aws_ecs_service.auth_service",
+                "aws_elasticache_cluster.redis",
+                EdgeType::Calls,
+            ),
+            (
+                "aws_ecs_service.payment_service",
+                "aws_db_instance.production",
+                EdgeType::Queries,
+            ),
         ];
 
         for (source, target, edge_type) in dependencies {
-            if let (Some(&source_id), Some(&target_id)) = (node_map.get(source), node_map.get(target)) {
+            if let (Some(&source_id), Some(&target_id)) =
+                (node_map.get(source), node_map.get(target))
+            {
                 let edge = Edge::new(edge_type, source_id, target_id)
                     .with_criticality(true)
                     .add_discovered_via("terraform");

@@ -40,7 +40,7 @@ pub struct NodeProperties {
     pub business_exposure: f32, // 0.0-1.0
     pub tags: HashMap<String, String>,
     pub discovered_via: Vec<String>, // Which discovery methods found this
-    pub confidence: f32, // 0.0-1.0
+    pub confidence: f32,             // 0.0-1.0
     pub owner: Option<String>,
     pub on_call: Option<String>,
     pub pagerduty_id: Option<String>,

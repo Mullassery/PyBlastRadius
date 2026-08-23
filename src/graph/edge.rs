@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::node::NodeId;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -20,15 +20,15 @@ impl Default for EdgeId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EdgeType {
-    Calls,           // A calls B (sync RPC)
-    Produces,        // A produces to B (async, Kafka/queue)
-    Consumes,        // A consumes from B
-    Queries,         // A queries B (database)
-    Feeds,           // A feeds data to B
-    DependsOn,       // A depends on B
-    Transforms,      // A transforms data from B (data pipeline)
-    ExportsTo,       // A exports to B (reverse ETL)
-    Retrieves,       // A retrieves from B (vector DB)
+    Calls,      // A calls B (sync RPC)
+    Produces,   // A produces to B (async, Kafka/queue)
+    Consumes,   // A consumes from B
+    Queries,    // A queries B (database)
+    Feeds,      // A feeds data to B
+    DependsOn,  // A depends on B
+    Transforms, // A transforms data from B (data pipeline)
+    ExportsTo,  // A exports to B (reverse ETL)
+    Retrieves,  // A retrieves from B (vector DB)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,7 +41,7 @@ pub struct EdgeProperties {
     pub has_fallback: bool,
     pub has_retry: bool,
     pub timeout_ms: Option<f32>,
-    pub confidence: f32, // 0.0-1.0
+    pub confidence: f32,             // 0.0-1.0
     pub discovered_via: Vec<String>, // Which discovery methods found this
     pub tags: HashMap<String, String>,
 }

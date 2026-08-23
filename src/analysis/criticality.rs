@@ -1,6 +1,6 @@
 use crate::error::Result;
-use crate::graph::Graph;
 use crate::graph::node::NodeId;
+use crate::graph::Graph;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +29,8 @@ impl CriticalityScorer {
             // (downstream_count × 0.4) + (node_criticality × 0.3) + (recovery_complexity × 0.2) + (business_exposure × 0.1)
             let downstream_score = (downstream as f32 / 10.0).min(1.0) * 0.4 * 100.0;
             let criticality_score = node.properties.criticality * 0.3 * 100.0;
-            let recovery_score = (node.properties.recovery_time_minutes as f32 / 60.0).min(1.0) * 0.2 * 100.0;
+            let recovery_score =
+                (node.properties.recovery_time_minutes as f32 / 60.0).min(1.0) * 0.2 * 100.0;
             let business_score = node.properties.business_exposure * 0.1 * 100.0;
 
             // Each weighted component above is already scaled onto the 0-100
@@ -49,7 +50,11 @@ impl CriticalityScorer {
         }
 
         // Sort by criticality descending
-        scores.sort_by(|a, b| b.criticality_score.partial_cmp(&a.criticality_score).unwrap());
+        scores.sort_by(|a, b| {
+            b.criticality_score
+                .partial_cmp(&a.criticality_score)
+                .unwrap()
+        });
 
         Ok(scores)
     }
@@ -65,7 +70,8 @@ impl CriticalityScorer {
 
         let downstream_score = (downstream as f32 / 10.0).min(1.0) * 0.4 * 100.0;
         let criticality_score = node.properties.criticality * 0.3 * 100.0;
-        let recovery_score = (node.properties.recovery_time_minutes as f32 / 60.0).min(1.0) * 0.2 * 100.0;
+        let recovery_score =
+            (node.properties.recovery_time_minutes as f32 / 60.0).min(1.0) * 0.2 * 100.0;
         let business_score = node.properties.business_exposure * 0.1 * 100.0;
 
         // See score_all(): components are already on the 0-100 scale, so no
@@ -123,7 +129,7 @@ impl CriticalityScorer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{Graph, Node, Edge, EdgeType};
+    use crate::graph::{Edge, EdgeType, Graph, Node};
 
     #[test]
     fn test_criticality_scoring() {
@@ -136,7 +142,9 @@ mod tests {
             .add_node(Node::database("db").with_criticality(0.95))
             .unwrap();
 
-        graph.add_edge(Edge::new(EdgeType::Queries, api, db)).unwrap();
+        graph
+            .add_edge(Edge::new(EdgeType::Queries, api, db))
+            .unwrap();
 
         let scores = CriticalityScorer::score_all(&graph).unwrap();
         assert_eq!(scores.len(), 2);
@@ -153,8 +161,12 @@ mod tests {
         let db = graph.add_node(Node::database("db")).unwrap();
         let cache = graph.add_node(Node::service("cache")).unwrap();
 
-        graph.add_edge(Edge::new(EdgeType::Queries, api, db)).unwrap();
-        graph.add_edge(Edge::new(EdgeType::Calls, api, cache)).unwrap();
+        graph
+            .add_edge(Edge::new(EdgeType::Queries, api, db))
+            .unwrap();
+        graph
+            .add_edge(Edge::new(EdgeType::Calls, api, cache))
+            .unwrap();
 
         let db_score = CriticalityScorer::score_node(&graph, db).unwrap();
         assert!(db_score.is_single_point_of_failure);
@@ -180,7 +192,9 @@ mod tests {
         graph.add_edge(Edge::new(EdgeType::Calls, root, a)).unwrap();
         graph.add_edge(Edge::new(EdgeType::Calls, root, b)).unwrap();
         graph.add_edge(Edge::new(EdgeType::Calls, a, b)).unwrap();
-        graph.add_edge(Edge::new(EdgeType::Calls, a, leaf_via_a)).unwrap();
+        graph
+            .add_edge(Edge::new(EdgeType::Calls, a, leaf_via_a))
+            .unwrap();
 
         // `a` branches to two nodes (b and leaf_via_a), but leaf_via_a still
         // has exactly one way in (through a) -> it is a real SPOF. The old

@@ -1,26 +1,23 @@
+use crate::error::Result;
 use std::fs;
 use std::path::Path;
-use crate::error::Result;
 
 pub fn read_file<P: AsRef<Path>>(path: P) -> Result<String> {
-    fs::read_to_string(path).map_err(|e| crate::error::Error::IoError(e))
+    fs::read_to_string(path).map_err(crate::error::Error::IoError)
 }
 
 pub fn write_file<P: AsRef<Path>>(path: P, content: &str) -> Result<()> {
-    fs::write(path, content).map_err(|e| crate::error::Error::IoError(e))
+    fs::write(path, content).map_err(crate::error::Error::IoError)
 }
 
 pub fn read_json_file<P: AsRef<Path>, T: for<'de> serde::de::Deserialize<'de>>(
     path: P,
 ) -> Result<T> {
     let content = read_file(path)?;
-    serde_json::from_str(&content).map_err(|e| crate::error::Error::JsonError(e))
+    serde_json::from_str(&content).map_err(crate::error::Error::JsonError)
 }
 
-pub fn write_json_file<P: AsRef<Path>, T: serde::ser::Serialize>(
-    path: P,
-    value: &T,
-) -> Result<()> {
+pub fn write_json_file<P: AsRef<Path>, T: serde::ser::Serialize>(path: P, value: &T) -> Result<()> {
     let content = serde_json::to_string_pretty(value)?;
     write_file(path, &content)
 }
@@ -29,13 +26,10 @@ pub fn read_yaml_file<P: AsRef<Path>, T: for<'de> serde::de::Deserialize<'de>>(
     path: P,
 ) -> Result<T> {
     let content = read_file(path)?;
-    serde_yaml::from_str(&content).map_err(|e| crate::error::Error::YamlError(e))
+    serde_yaml::from_str(&content).map_err(crate::error::Error::YamlError)
 }
 
-pub fn write_yaml_file<P: AsRef<Path>, T: serde::ser::Serialize>(
-    path: P,
-    value: &T,
-) -> Result<()> {
+pub fn write_yaml_file<P: AsRef<Path>, T: serde::ser::Serialize>(path: P, value: &T) -> Result<()> {
     let content = serde_yaml::to_string(value)?;
     write_file(path, &content)
 }

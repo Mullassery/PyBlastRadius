@@ -82,7 +82,9 @@ impl OtlpDiscoverer {
             }
         }
 
-        let spans = collected.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let spans = collected
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         build_graph(&spans)
     }
 }
@@ -144,7 +146,11 @@ fn build_graph(resource_spans: &[ResourceSpans]) -> Result<Graph> {
     Ok(graph)
 }
 
-fn ensure_node(graph: &mut Graph, node_ids: &mut HashMap<String, NodeId>, name: &str) -> Result<NodeId> {
+fn ensure_node(
+    graph: &mut Graph,
+    node_ids: &mut HashMap<String, NodeId>,
+    name: &str,
+) -> Result<NodeId> {
     if let Some(&id) = node_ids.get(name) {
         return Ok(id);
     }
@@ -280,7 +286,13 @@ mod tests {
     fn test_latency_is_derived_from_real_span_timing() {
         let root = span(b"parent00", b"", 0, 0, false);
         // 45ms span duration, in nanoseconds.
-        let child = span(b"child000", b"parent00", 1_000_000_000, 1_045_000_000, false);
+        let child = span(
+            b"child000",
+            b"parent00",
+            1_000_000_000,
+            1_045_000_000,
+            false,
+        );
 
         let resource_spans = vec![
             resource_spans("api-gateway", vec![root]),
@@ -332,7 +344,10 @@ mod tests {
             }],
             schema_url: String::new(),
         };
-        let child = resource_spans("known-service", vec![span(b"child000", b"parent00", 0, 1_000_000, false)]);
+        let child = resource_spans(
+            "known-service",
+            vec![span(b"child000", b"parent00", 0, 1_000_000, false)],
+        );
 
         let graph = build_graph(&[root, child]).unwrap();
 

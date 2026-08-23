@@ -1,8 +1,7 @@
 use crate::error::Result;
-use crate::graph::{Graph, Edge, EdgeType};
 use crate::graph::node::NodeId;
+use crate::graph::{EdgeType, Graph};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
 
 /// Hidden dependency detector using advanced trace mining
 /// Identifies undocumented dependencies that static analysis misses
@@ -11,9 +10,9 @@ pub struct HiddenDependency {
     pub source: NodeId,
     pub target: NodeId,
     pub dependency_type: EdgeType,
-    pub confidence: f32,  // 0-1.0, higher = more certain
-    pub detection_method: String,  // "trace_mining", "query_log", "config", "semantic"
-    pub evidence: Vec<String>,  // Supporting evidence
+    pub confidence: f32,          // 0-1.0, higher = more certain
+    pub detection_method: String, // "trace_mining", "query_log", "config", "semantic"
+    pub evidence: Vec<String>,    // Supporting evidence
 }
 
 pub struct HiddenDependencyDetector;
@@ -53,7 +52,9 @@ impl HiddenDependencyDetector {
 
                 // Simulate finding background jobs
                 for target_node in &all_nodes {
-                    if target_node.id != node.id && Self::could_have_async_dependency(&node.name, &target_node.name) {
+                    if target_node.id != node.id
+                        && Self::could_have_async_dependency(&node.name, &target_node.name)
+                    {
                         hidden.push(HiddenDependency {
                             source: node.id,
                             target: target_node.id,
@@ -75,7 +76,7 @@ impl HiddenDependencyDetector {
 
     /// Analyze query patterns to find implicit database dependencies
     fn detect_from_query_logs(_graph: &Graph) -> Result<Vec<HiddenDependency>> {
-        let mut hidden = Vec::new();
+        let hidden = Vec::new();
 
         // In production: Parse database query logs
         // Look for patterns like:
@@ -89,7 +90,7 @@ impl HiddenDependencyDetector {
 
     /// Mine configuration files for hardcoded dependencies
     fn detect_from_config(_graph: &Graph) -> Result<Vec<HiddenDependency>> {
-        let mut hidden = Vec::new();
+        let hidden = Vec::new();
 
         // In production: Parse configs for:
         // 1. Environment variables with connection strings
@@ -118,9 +119,10 @@ impl HiddenDependencyDetector {
                         dependency_type: EdgeType::DependsOn,
                         confidence: 0.45,
                         detection_method: "semantic_analysis".to_string(),
-                        evidence: vec![
-                            format!("Shared business logic pattern detected between {} and {}", source.name, target.name),
-                        ],
+                        evidence: vec![format!(
+                            "Shared business logic pattern detected between {} and {}",
+                            source.name, target.name
+                        )],
                     });
                 }
             }
@@ -131,7 +133,7 @@ impl HiddenDependencyDetector {
 
     /// Check if names suggest async/background job relationship
     fn could_have_async_dependency(source: &str, target: &str) -> bool {
-        let async_keywords = vec!["worker", "job", "scheduler", "queue", "consumer", "handler"];
+        let async_keywords = ["worker", "job", "scheduler", "queue", "consumer", "handler"];
 
         let is_async_pattern = async_keywords.iter().any(|k| target.contains(k));
         is_async_pattern && !source.contains(target)
@@ -144,7 +146,7 @@ impl HiddenDependencyDetector {
         let target_parts: Vec<&str> = target.split('-').collect();
 
         // Check for shared prefixes (e.g., "payment-" in both)
-        if source_parts.len() > 0 && target_parts.len() > 0 {
+        if !source_parts.is_empty() && !target_parts.is_empty() {
             let source_domain = source_parts[0];
             let target_domain = target_parts[0];
 
@@ -168,10 +170,10 @@ impl DependencyConfidenceScorer {
 
         // Boost based on detection method strength
         let method_boost = match dep.detection_method.as_str() {
-            "trace_mining" => 0.95,  // Very high confidence
-            "query_log" => 0.90,     // High confidence
-            "config" => 0.85,        // Good confidence
-            "semantic_analysis" => 0.45,  // Lower confidence
+            "trace_mining" => 0.95,      // Very high confidence
+            "query_log" => 0.90,         // High confidence
+            "config" => 0.85,            // Good confidence
+            "semantic_analysis" => 0.45, // Lower confidence
             _ => 0.5,
         };
 
@@ -202,7 +204,9 @@ mod tests {
         let n2 = graph.add_node(Node::service("background-worker")).unwrap();
         let n3 = graph.add_node(Node::database("postgres")).unwrap();
 
-        graph.add_edge(crate::graph::Edge::new(EdgeType::Calls, n1, n3)).unwrap();
+        graph
+            .add_edge(crate::graph::Edge::new(EdgeType::Calls, n1, n3))
+            .unwrap();
 
         let hidden = HiddenDependencyDetector::detect(&graph).unwrap();
 

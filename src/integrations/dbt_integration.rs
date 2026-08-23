@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::graph::{Graph, Node, Edge, NodeType, EdgeType};
+use crate::graph::{Edge, EdgeType, Graph, Node, NodeType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -31,18 +31,16 @@ impl DbtManifestParser {
                     name: "stg_customers".to_string(),
                     model_type: DbtModelType::Staging,
                     depends_on: vec!["raw_customers".to_string()],
-                    tests: vec![
-                        DbtTest {
-                            test_id: "not_null_customers_id".to_string(),
-                            test_type: DbtTestType::NotNull,
-                            column: "customer_id".to_string(),
-                        },
-                    ],
+                    tests: vec![DbtTest {
+                        test_id: "not_null_customers_id".to_string(),
+                        test_type: DbtTestType::NotNull,
+                        column: "customer_id".to_string(),
+                    }],
                     columns: vec![
                         DbtColumn {
                             name: "customer_id".to_string(),
                             data_type: "INT".to_string(),
-                            sources: vec![],  // Direct from raw
+                            sources: vec![], // Direct from raw
                         },
                         DbtColumn {
                             name: "email".to_string(),
@@ -55,13 +53,11 @@ impl DbtManifestParser {
                     name: "fct_orders".to_string(),
                     model_type: DbtModelType::Fact,
                     depends_on: vec!["stg_customers".to_string(), "stg_orders".to_string()],
-                    tests: vec![
-                        DbtTest {
-                            test_id: "unique_orders_id".to_string(),
-                            test_type: DbtTestType::Unique,
-                            column: "order_id".to_string(),
-                        },
-                    ],
+                    tests: vec![DbtTest {
+                        test_id: "unique_orders_id".to_string(),
+                        test_type: DbtTestType::Unique,
+                        column: "order_id".to_string(),
+                    }],
                     columns: vec![
                         DbtColumn {
                             name: "order_id".to_string(),
@@ -160,10 +156,7 @@ impl DbtManifestParser {
     }
 
     /// Extract column-level lineage (which source columns feed into target columns)
-    pub fn extract_column_lineage(
-        &self,
-        metadata: &DbtMetadata,
-    ) -> Result<Vec<DbtColumnLineage>> {
+    pub fn extract_column_lineage(&self, metadata: &DbtMetadata) -> Result<Vec<DbtColumnLineage>> {
         let mut lineage = Vec::new();
 
         for model in &metadata.models {
@@ -171,10 +164,10 @@ impl DbtManifestParser {
                 for source_col in &column.sources {
                     lineage.push(DbtColumnLineage {
                         source_model: source_col.split('.').next().unwrap_or("").to_string(),
-                        source_column: source_col.split('.').last().unwrap_or("").to_string(),
+                        source_column: source_col.split('.').next_back().unwrap_or("").to_string(),
                         target_model: model.name.clone(),
                         target_column: column.name.clone(),
-                        transformation: None,  // Would be extracted from dbt code
+                        transformation: None, // Would be extracted from dbt code
                     });
                 }
             }
@@ -194,7 +187,7 @@ impl DbtManifestParser {
                     model_name: model.name.clone(),
                     test_type: test.test_type,
                     column: test.column.clone(),
-                    status: DbtTestStatus::Unknown,  // Would be determined from dbt runs
+                    status: DbtTestStatus::Unknown, // Would be determined from dbt runs
                 });
             }
         }
@@ -232,7 +225,7 @@ pub enum DbtModelType {
 pub struct DbtColumn {
     pub name: String,
     pub data_type: String,
-    pub sources: Vec<String>,  // Column lineage: model.column
+    pub sources: Vec<String>, // Column lineage: model.column
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

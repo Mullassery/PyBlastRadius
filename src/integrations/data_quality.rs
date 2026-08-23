@@ -1,6 +1,4 @@
 use crate::error::Result;
-use crate::graph::Graph;
-use crate::graph::node::NodeId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -46,15 +44,15 @@ impl ColumnLineageTracker {
         target: String,
         transformation: Option<String>,
     ) -> Result<()> {
-        let key = format!("{}_{}_to_{}", &source, &target, &target);
+        let key = format!("{}_{}_to_{}", source, target, target);
         self.lineage_map
             .entry(key)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(ColumnDependency {
                 source_table: source.split('.').next().unwrap_or("").to_string(),
-                source_column: source.split('.').last().unwrap_or("").to_string(),
+                source_column: source.split('.').next_back().unwrap_or("").to_string(),
                 target_table: target.split('.').next().unwrap_or("").to_string(),
-                target_column: target.split('.').last().unwrap_or("").to_string(),
+                target_column: target.split('.').next_back().unwrap_or("").to_string(),
                 transformation,
             });
 
@@ -65,7 +63,7 @@ impl ColumnLineageTracker {
     pub fn find_downstream_impact(&self, source_column: &str) -> Vec<String> {
         let mut affected = Vec::new();
 
-        for (_key, deps) in &self.lineage_map {
+        for deps in self.lineage_map.values() {
             for dep in deps {
                 if format!("{}.{}", dep.source_table, dep.source_column) == source_column {
                     affected.push(format!("{}.{}", dep.target_table, dep.target_column));
@@ -129,12 +127,12 @@ pub struct QualityMetric {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MetricType {
-    Freshness,      // How recent is the data (hours)
-    Completeness,   // % non-null values
-    Uniqueness,     // % unique values
-    Timeliness,     // SLA compliance
-    Validity,       // Format/range checks
-    Accuracy,       // Validation against source
+    Freshness,    // How recent is the data (hours)
+    Completeness, // % non-null values
+    Uniqueness,   // % unique values
+    Timeliness,   // SLA compliance
+    Validity,     // Format/range checks
+    Accuracy,     // Validation against source
 }
 
 /// Integrates column lineage with quality metrics to predict cascade impact
@@ -173,7 +171,7 @@ impl DataQualityImpactAnalyzer {
             EventSeverity::Critical
         } else if downstream.len() > 5 {
             EventSeverity::High
-        } else if downstream.len() > 0 {
+        } else if !downstream.is_empty() {
             EventSeverity::Medium
         } else {
             EventSeverity::Low
@@ -192,7 +190,11 @@ impl DataQualityImpactAnalyzer {
 
     /// Register a quality metric
     pub fn register_metric(&mut self, metric: QualityMetric) -> Result<()> {
-        let key = format!("{}_{}", metric.table_name, metric.column_name.clone().unwrap_or_default());
+        let key = format!(
+            "{}_{}",
+            metric.table_name,
+            metric.column_name.clone().unwrap_or_default()
+        );
         self.quality_metrics.insert(key, metric);
         Ok(())
     }
@@ -213,10 +215,10 @@ impl DataQualityImpactAnalyzer {
 
     fn estimate_recovery(severity: &EventSeverity) -> u32 {
         match severity {
-            EventSeverity::Critical => 2,   // 2 hours
-            EventSeverity::High => 4,       // 4 hours
-            EventSeverity::Medium => 8,     // 8 hours
-            EventSeverity::Low => 24,       // 1 day
+            EventSeverity::Critical => 2, // 2 hours
+            EventSeverity::High => 4,     // 4 hours
+            EventSeverity::Medium => 8,   // 8 hours
+            EventSeverity::Low => 24,     // 1 day
         }
     }
 

@@ -1,11 +1,10 @@
 /// GraphQL API and REST integrations
 /// Phase 3 (v1.0) feature set
-
 pub mod graphql;
 pub mod integrations;
 
-pub use graphql::{GraphQLSchema, GraphQLQuery};
-pub use integrations::{SlackIntegration, PagerDutyIntegration};
+pub use graphql::{GraphQLQuery, GraphQLSchema};
+pub use integrations::{PagerDutyIntegration, SlackIntegration};
 
 /// GraphQL schema for querying blast radius data
 pub const GRAPHQL_SCHEMA: &str = r#"

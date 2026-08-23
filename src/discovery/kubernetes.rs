@@ -75,7 +75,7 @@ impl KubernetesDiscoverer {
             .filter(|e| {
                 e.path()
                     .extension()
-                    .map_or(false, |ext| ext == "yaml" || ext == "yml")
+                    .is_some_and(|ext| ext == "yaml" || ext == "yml")
             })
         {
             self.parse_file(entry.path(), &mut graph, &mut node_map, &mut env_values)?;
@@ -170,9 +170,17 @@ impl KubernetesDiscoverer {
     /// anything else defaults to a generic Service (still real, just less
     /// specifically classified without deeper image/label inspection).
     fn looks_like_datastore(name: &str) -> bool {
-        ["postgres", "postgresql", "mysql", "redis", "kafka", "mongodb", "cassandra"]
-            .iter()
-            .any(|d| name.to_lowercase().contains(d))
+        [
+            "postgres",
+            "postgresql",
+            "mysql",
+            "redis",
+            "kafka",
+            "mongodb",
+            "cassandra",
+        ]
+        .iter()
+        .any(|d| name.to_lowercase().contains(d))
     }
 
     fn datastore_type(name: &str) -> NodeType {

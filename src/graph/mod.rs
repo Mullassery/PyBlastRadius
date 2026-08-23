@@ -1,14 +1,18 @@
-pub mod node;
 pub mod edge;
+// graph::graph::Graph reads oddly in isolation, but graph::Graph (the
+// re-export below) is what every caller actually uses -- renaming the file
+// would only rename the lint away, not change any real API.
+#[allow(clippy::module_inception)]
 pub mod graph;
-pub mod traversal;
+pub mod node;
 pub mod serialization;
+pub mod traversal;
 
-pub use node::{Node, NodeType, NodeProperties};
-pub use edge::{Edge, EdgeType, EdgeProperties};
+pub use edge::{Edge, EdgeProperties, EdgeType};
 pub use graph::{Graph, GraphMetrics};
+pub use node::{Node, NodeProperties, NodeType};
+pub use serialization::{ExportFormat, GraphExporter, GraphImporter};
 pub use traversal::{BfsTraversal, DfsTraversal, TopoSort, TraversalResult};
-pub use serialization::{GraphExporter, GraphImporter, ExportFormat};
 
 #[cfg(test)]
 mod tests {

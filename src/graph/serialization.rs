@@ -125,7 +125,7 @@ impl GraphExporter {
             ));
         }
 
-        dot.push_str("\n");
+        dot.push('\n');
 
         // Add edges
         for edge in graph.edges() {
@@ -164,8 +164,9 @@ impl GraphExporter {
                     nodes: graph.nodes().cloned().collect(),
                     edges: graph.edges().cloned().collect(),
                 };
-                serde_yaml::to_string(&snapshot)
-                    .map_err(|e| Error::parse_error(format!("graph snapshot YAML serialization failed: {}", e)))?
+                serde_yaml::to_string(&snapshot).map_err(|e| {
+                    Error::parse_error(format!("graph snapshot YAML serialization failed: {}", e))
+                })?
             }
             _ => Self::save_json(graph)?,
         };
@@ -183,7 +184,8 @@ impl GraphExporter {
                 criticality: n.properties.criticality,
                 health_status: format!("{:?}", n.properties.health_status),
                 recovery_time_minutes: n.properties.recovery_time_minutes,
-                tags: serde_json::to_value(&n.properties.tags).unwrap_or(serde_json::Value::Object(Default::default())),
+                tags: serde_json::to_value(&n.properties.tags)
+                    .unwrap_or(serde_json::Value::Object(Default::default())),
             })
             .collect();
 
@@ -238,8 +240,9 @@ impl GraphImporter {
         let contents = std::fs::read_to_string(path)?;
         match path.extension().and_then(|e| e.to_str()) {
             Some("yaml") | Some("yml") => {
-                let snapshot: GraphSnapshot = serde_yaml::from_str(&contents)
-                    .map_err(|e| Error::parse_error(format!("graph snapshot YAML parse failed: {}", e)))?;
+                let snapshot: GraphSnapshot = serde_yaml::from_str(&contents).map_err(|e| {
+                    Error::parse_error(format!("graph snapshot YAML parse failed: {}", e))
+                })?;
                 let mut graph = Graph::new();
                 for node in snapshot.nodes {
                     graph.add_node(node)?;
@@ -257,7 +260,7 @@ impl GraphImporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{Graph, Node, Edge, EdgeType};
+    use crate::graph::{Edge, EdgeType, Graph, Node};
 
     #[test]
     fn test_json_export() {
@@ -287,9 +290,15 @@ mod tests {
     fn test_save_load_json_round_trip_preserves_ids_and_properties() {
         let mut graph = Graph::new();
         let n1 = graph
-            .add_node(Node::service("api").with_criticality(0.9).with_owner("sre-team"))
+            .add_node(
+                Node::service("api")
+                    .with_criticality(0.9)
+                    .with_owner("sre-team"),
+            )
             .unwrap();
-        let n2 = graph.add_node(Node::database("postgres").with_criticality(0.98)).unwrap();
+        let n2 = graph
+            .add_node(Node::database("postgres").with_criticality(0.98))
+            .unwrap();
         graph
             .add_edge(
                 Edge::new(EdgeType::Queries, n1, n2)

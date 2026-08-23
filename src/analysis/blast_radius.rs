@@ -1,6 +1,6 @@
 use crate::error::Result;
-use crate::graph::{Graph, BfsTraversal};
 use crate::graph::node::NodeId;
+use crate::graph::{BfsTraversal, Graph};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,13 +34,8 @@ impl BlastRadiusAnalyzer {
         let (directly, indirectly, tertiary) = Self::categorize_by_depth(&traversal.depth_levels);
 
         // Calculate blast radius score
-        let blast_radius_score = Self::calculate_score(
-            graph,
-            source_node_id,
-            &directly,
-            &indirectly,
-            &tertiary,
-        )?;
+        let blast_radius_score =
+            Self::calculate_score(graph, source_node_id, &directly, &indirectly, &tertiary)?;
 
         // Count critical paths
         let critical_path_count = Self::count_critical_paths(graph, source_node_id, &directly)?;
@@ -63,21 +58,13 @@ impl BlastRadiusAnalyzer {
         source_node_id: NodeId,
         max_depth: usize,
     ) -> Result<BlastRadiusResult> {
-        let traversal = crate::graph::BfsTraversal::traverse_with_limit(
-            graph,
-            source_node_id,
-            max_depth,
-        )?;
+        let traversal =
+            crate::graph::BfsTraversal::traverse_with_limit(graph, source_node_id, max_depth)?;
 
         let (directly, indirectly, tertiary) = Self::categorize_by_depth(&traversal.depth_levels);
 
-        let blast_radius_score = Self::calculate_score(
-            graph,
-            source_node_id,
-            &directly,
-            &indirectly,
-            &tertiary,
-        )?;
+        let blast_radius_score =
+            Self::calculate_score(graph, source_node_id, &directly, &indirectly, &tertiary)?;
 
         let critical_path_count = Self::count_critical_paths(graph, source_node_id, &directly)?;
 
@@ -94,7 +81,9 @@ impl BlastRadiusAnalyzer {
         })
     }
 
-    fn categorize_by_depth(depth_levels: &[Vec<NodeId>]) -> (Vec<NodeId>, Vec<NodeId>, Vec<NodeId>) {
+    fn categorize_by_depth(
+        depth_levels: &[Vec<NodeId>],
+    ) -> (Vec<NodeId>, Vec<NodeId>, Vec<NodeId>) {
         let directly = if depth_levels.len() > 1 {
             depth_levels[1].clone()
         } else {
@@ -166,7 +155,7 @@ impl BlastRadiusAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{Graph, Node, Edge, EdgeType};
+    use crate::graph::{Edge, EdgeType, Graph, Node};
 
     #[test]
     fn test_blast_radius_calculation() {

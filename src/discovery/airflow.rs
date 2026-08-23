@@ -1,7 +1,7 @@
 use crate::error::Result;
-use crate::graph::{Graph, Node, Edge, NodeType, EdgeType};
-use std::collections::HashMap;
+use crate::graph::{Edge, EdgeType, Graph, Node, NodeType};
 use regex::Regex;
+use std::collections::HashMap;
 use walkdir::WalkDir;
 
 /// Airflow DAG parser for data pipeline dependency discovery
@@ -36,7 +36,7 @@ impl AirflowDiscoverer {
         for entry in WalkDir::new(&self.dag_folder)
             .into_iter()
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |ext| ext == "py"))
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "py"))
         {
             self.parse_dag_file(entry.path(), graph, node_map)?;
         }
@@ -50,8 +50,9 @@ impl AirflowDiscoverer {
         graph: &mut Graph,
         node_map: &mut HashMap<String, crate::graph::node::NodeId>,
     ) -> Result<()> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| crate::error::Error::parse_error(format!("Failed to read {}: {}", path.display(), e)))?;
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            crate::error::Error::parse_error(format!("Failed to read {}: {}", path.display(), e))
+        })?;
 
         // Extract DAG name
         let dag_id = self.extract_dag_id(&content)?;
@@ -134,15 +135,13 @@ impl AirflowDiscoverer {
         ];
 
         for (pattern, name, node_type) in databases {
-            if content.contains(pattern) {
-                if !node_map.contains_key(name) {
-                    let node = Node::new(name, node_type)
-                        .with_criticality(0.85)
-                        .add_discovered_via("airflow-external");
+            if content.contains(pattern) && !node_map.contains_key(name) {
+                let node = Node::new(name, node_type)
+                    .with_criticality(0.85)
+                    .add_discovered_via("airflow-external");
 
-                    let node_id = graph.add_node(node)?;
-                    node_map.insert(name.to_string(), node_id);
-                }
+                let node_id = graph.add_node(node)?;
+                node_map.insert(name.to_string(), node_id);
             }
         }
 
@@ -159,13 +158,23 @@ impl AirflowDiscoverer {
 
         // For MVP: example dependencies
         let dependencies = vec![
-            ("example_dag.load_data", "example_dag.transform", EdgeType::DependsOn),
-            ("example_dag.transform", "example_dag.publish", EdgeType::DependsOn),
+            (
+                "example_dag.load_data",
+                "example_dag.transform",
+                EdgeType::DependsOn,
+            ),
+            (
+                "example_dag.transform",
+                "example_dag.publish",
+                EdgeType::DependsOn,
+            ),
             ("example_dag.publish", "postgresql", EdgeType::Feeds),
         ];
 
         for (source, target, edge_type) in dependencies {
-            if let (Some(&source_id), Some(&target_id)) = (node_map.get(source), node_map.get(target)) {
+            if let (Some(&source_id), Some(&target_id)) =
+                (node_map.get(source), node_map.get(target))
+            {
                 let edge = Edge::new(edge_type, source_id, target_id)
                     .with_criticality(true)
                     .add_discovered_via("airflow");

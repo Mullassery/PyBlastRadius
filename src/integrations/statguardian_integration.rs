@@ -1,7 +1,5 @@
 use crate::error::Result;
-use crate::graph::{Graph, Node, Edge, NodeType, EdgeType};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// StatGuardian integration for data quality tracking
 /// Detects data quality issues that could cascade through pipelines
@@ -40,7 +38,7 @@ impl StatGuardianClient {
                 table_name: "users".to_string(),
                 column_name: "email".to_string(),
                 rule_type: QualityRuleType::NotNull,
-                threshold: 0.0,  // No nulls allowed
+                threshold: 0.0, // No nulls allowed
                 severity: QualitySeverity::Critical,
             },
             QualityRule {
@@ -48,7 +46,7 @@ impl StatGuardianClient {
                 table_name: "events".to_string(),
                 column_name: "created_at".to_string(),
                 rule_type: QualityRuleType::Freshness,
-                threshold: 60.0,  // Max 60 min old
+                threshold: 60.0, // Max 60 min old
                 severity: QualitySeverity::High,
             },
             QualityRule {
@@ -56,7 +54,7 @@ impl StatGuardianClient {
                 table_name: "orders".to_string(),
                 column_name: "order_id".to_string(),
                 rule_type: QualityRuleType::Uniqueness,
-                threshold: 1.0,  // 100% unique
+                threshold: 1.0, // 100% unique
                 severity: QualitySeverity::Critical,
             },
         ];
@@ -66,27 +64,22 @@ impl StatGuardianClient {
 
     /// Check data quality status for specific table
     pub async fn check_table_quality(&self, table_name: &str) -> Result<DataQualityCheck> {
-        let checks = vec![
-            DataQualityCheck {
-                check_id: format!("check_{}_001", table_name),
-                table_name: table_name.to_string(),
-                check_type: QualityRuleType::NotNull,
-                status: QualityStatus::Pass,
-                last_run: chrono::Utc::now(),
-                failed_rows: 0,
-                failure_rate: 0.0,
-            },
-        ];
+        let checks = [DataQualityCheck {
+            check_id: format!("check_{}_001", table_name),
+            table_name: table_name.to_string(),
+            check_type: QualityRuleType::NotNull,
+            status: QualityStatus::Pass,
+            last_run: chrono::Utc::now(),
+            failed_rows: 0,
+            failure_rate: 0.0,
+        }];
 
         Ok(checks[0].clone())
     }
 
     /// Get column-level lineage from data warehouse
     /// Returns which columns feed into other tables
-    pub async fn get_column_lineage(
-        &self,
-        table_name: &str,
-    ) -> Result<Vec<ColumnLineageEdge>> {
+    pub async fn get_column_lineage(&self, _table_name: &str) -> Result<Vec<ColumnLineageEdge>> {
         // In production: Query data warehouse for column-level lineage
         let lineage = vec![
             ColumnLineageEdge {
@@ -140,10 +133,10 @@ impl StatGuardianClient {
 
     fn estimate_recovery_time(incident: &QualityIncident) -> u32 {
         match incident.severity {
-            QualitySeverity::Critical => 4,   // 4 hours
-            QualitySeverity::High => 8,       // 8 hours
-            QualitySeverity::Medium => 24,    // 1 day
-            QualitySeverity::Low => 72,       // 3 days
+            QualitySeverity::Critical => 4, // 4 hours
+            QualitySeverity::High => 8,     // 8 hours
+            QualitySeverity::Medium => 24,  // 1 day
+            QualitySeverity::Low => 72,     // 3 days
         }
     }
 }
@@ -251,7 +244,9 @@ mod tests {
 
         let rules = client.get_quality_rules().await.unwrap();
         assert!(!rules.is_empty());
-        assert!(rules.iter().any(|r| r.severity == QualitySeverity::Critical));
+        assert!(rules
+            .iter()
+            .any(|r| r.severity == QualitySeverity::Critical));
     }
 
     #[tokio::test]
@@ -286,6 +281,6 @@ mod tests {
 
         let impact = client.track_quality_incident(incident).await.unwrap();
         assert!(!impact.affected_downstream_tables.is_empty());
-        assert_eq!(impact.estimated_recovery_hours, 4);  // Critical
+        assert_eq!(impact.estimated_recovery_hours, 4); // Critical
     }
 }

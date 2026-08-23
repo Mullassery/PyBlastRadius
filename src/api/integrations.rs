@@ -41,7 +41,7 @@ impl SlackIntegration {
     ) -> crate::error::Result<()> {
         let affected_list = affected_services.join(", ");
 
-        let payload = serde_json::json!({
+        let _payload = serde_json::json!({
             "channel": self.channel,
             "username": self.bot_name.clone().unwrap_or_default(),
             "text": format!("🚨 Blast Radius Analysis for {}", service_name),
@@ -85,7 +85,7 @@ impl SlackIntegration {
         severity: f32,
         predicted_ttf: u32,
     ) -> crate::error::Result<()> {
-        let payload = serde_json::json!({
+        let _payload = serde_json::json!({
             "channel": self.channel,
             "username": self.bot_name.clone().unwrap_or_default(),
             "text": format!("⚠️ Anomaly Detected on {}", node_name),
@@ -143,7 +143,7 @@ impl PagerDutyIntegration {
         blast_score: f32,
         description: &str,
     ) -> crate::error::Result<String> {
-        let payload = serde_json::json!({
+        let _payload = serde_json::json!({
             "routing_key": self.integration_key,
             "event_action": "trigger",
             "dedup_key": format!("blast-{}-{}", service_name, chrono::Utc::now().timestamp()),
@@ -174,7 +174,7 @@ impl PagerDutyIntegration {
 
     /// Resolve PagerDuty incident
     pub async fn resolve_incident(&self, incident_id: &str) -> crate::error::Result<()> {
-        let payload = serde_json::json!({
+        let _payload = serde_json::json!({
             "routing_key": self.integration_key,
             "event_action": "resolve",
             "dedup_key": incident_id
@@ -188,7 +188,7 @@ impl PagerDutyIntegration {
 /// Slack command response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlackCommandResponse {
-    pub response_type: String,  // "in_channel" or "ephemeral"
+    pub response_type: String, // "in_channel" or "ephemeral"
     pub text: String,
     pub blocks: Option<Vec<serde_json::Value>>,
 }
@@ -247,7 +247,11 @@ mod tests {
         let pd = PagerDutyIntegration::new("key123".to_string());
 
         let result = pd
-            .create_incident("payment-service", 0.95, "Payment service blast radius critical")
+            .create_incident(
+                "payment-service",
+                0.95,
+                "Payment service blast radius critical",
+            )
             .await;
 
         assert!(result.is_ok());

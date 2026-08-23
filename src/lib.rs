@@ -1,30 +1,33 @@
 #![doc = include_str!("../README.md")]
 #![allow(dead_code)]
 
-pub mod graph;
-pub mod discovery;
 pub mod analysis;
-pub mod models;
-pub mod utils;
-pub mod error;
 pub mod api;
+pub mod discovery;
+pub mod error;
+pub mod graph;
 pub mod integrations;
+pub mod models;
 mod python;
+pub mod utils;
 
-pub use graph::{Graph, Node, Edge, NodeType, EdgeType};
-pub use graph::serialization::{GraphExporter, GraphImporter, ExportFormat};
-pub use analysis::{BlastRadius, BlastRadiusAnalyzer, CriticalityScorer, Simulator, FailureType};
-pub use models::{Service, Database, Pipeline, DiscoveryConfig};
-pub use error::{Error, Result};
-pub use discovery::kubernetes::KubernetesDiscoverer;
-pub use discovery::terraform::TerraformDiscoverer;
+pub use analysis::{BlastRadius, BlastRadiusAnalyzer, CriticalityScorer, FailureType, Simulator};
 pub use discovery::airflow::AirflowDiscoverer;
+pub use discovery::kubernetes::KubernetesDiscoverer;
 #[cfg(feature = "otlp-traces")]
 pub use discovery::otlp::OtlpDiscoverer;
+pub use discovery::terraform::TerraformDiscoverer;
+pub use error::{Error, Result};
+pub use graph::serialization::{ExportFormat, GraphExporter, GraphImporter};
+pub use graph::{Edge, EdgeType, Graph, Node, NodeType};
+pub use models::{Database, DiscoveryConfig, Pipeline, Service};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const NAME: &str = env!("CARGO_PKG_NAME");
 
 pub fn about() -> String {
-    format!("{} v{}\nOperational Blast Radius Intelligence Platform", NAME, VERSION)
+    format!(
+        "{} v{}\nOperational Blast Radius Intelligence Platform",
+        NAME, VERSION
+    )
 }

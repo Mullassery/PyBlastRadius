@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::graph::{Graph, Node, Edge, NodeType, EdgeType};
+use crate::graph::{Edge, EdgeType, Graph, Node};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -16,8 +16,8 @@ pub struct OtelCollectorClient {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OtelProtocol {
-    GRPC,  // otlp/grpc (gRPC)
-    HTTP,  // otlp/http (HTTP/protobuf)
+    GRPC, // otlp/grpc (gRPC)
+    HTTP, // otlp/http (HTTP/protobuf)
 }
 
 impl OtelCollectorClient {
@@ -72,10 +72,7 @@ impl OtelCollectorClient {
     }
 
     /// Discover dependencies from OTel traces with extended timeframe
-    pub async fn discover_dependencies(
-        &self,
-        time_window_minutes: u64,
-    ) -> Result<Graph> {
+    pub async fn discover_dependencies(&self, time_window_minutes: u64) -> Result<Graph> {
         let mut graph = Graph::new();
 
         // Fetch traces from collector for time window
@@ -88,41 +85,39 @@ impl OtelCollectorClient {
     }
 
     /// Fetch traces from OTel collector
-    async fn fetch_traces(&self, time_window_minutes: u64) -> Result<Vec<OtelTrace>> {
+    async fn fetch_traces(&self, _time_window_minutes: u64) -> Result<Vec<OtelTrace>> {
         // In production: Query OTel collector API
         // For MVP: Return sample traces
 
-        let traces = vec![
-            OtelTrace {
-                trace_id: "abc123".to_string(),
-                spans: vec![
-                    OtelSpan {
-                        span_id: "span1".to_string(),
-                        parent_span_id: None,
-                        service_name: "api-gateway".to_string(),
-                        operation_name: "POST /checkout".to_string(),
-                        status: "OK".to_string(),
-                        duration_ms: 250.0,
-                        attributes: HashMap::from_iter(vec![
-                            ("http.method".to_string(), "POST".to_string()),
-                            ("http.status_code".to_string(), "200".to_string()),
-                        ]),
-                    },
-                    OtelSpan {
-                        span_id: "span2".to_string(),
-                        parent_span_id: Some("span1".to_string()),
-                        service_name: "payment-service".to_string(),
-                        operation_name: "processPayment".to_string(),
-                        status: "OK".to_string(),
-                        duration_ms: 200.0,
-                        attributes: HashMap::from_iter(vec![
-                            ("rpc.system".to_string(), "grpc".to_string()),
-                            ("rpc.method".to_string(), "ProcessPayment".to_string()),
-                        ]),
-                    },
-                ],
-            },
-        ];
+        let traces = vec![OtelTrace {
+            trace_id: "abc123".to_string(),
+            spans: vec![
+                OtelSpan {
+                    span_id: "span1".to_string(),
+                    parent_span_id: None,
+                    service_name: "api-gateway".to_string(),
+                    operation_name: "POST /checkout".to_string(),
+                    status: "OK".to_string(),
+                    duration_ms: 250.0,
+                    attributes: HashMap::from_iter(vec![
+                        ("http.method".to_string(), "POST".to_string()),
+                        ("http.status_code".to_string(), "200".to_string()),
+                    ]),
+                },
+                OtelSpan {
+                    span_id: "span2".to_string(),
+                    parent_span_id: Some("span1".to_string()),
+                    service_name: "payment-service".to_string(),
+                    operation_name: "processPayment".to_string(),
+                    status: "OK".to_string(),
+                    duration_ms: 200.0,
+                    attributes: HashMap::from_iter(vec![
+                        ("rpc.system".to_string(), "grpc".to_string()),
+                        ("rpc.method".to_string(), "ProcessPayment".to_string()),
+                    ]),
+                },
+            ],
+        }];
 
         Ok(traces)
     }
@@ -150,7 +145,8 @@ impl OtelCollectorClient {
             for span in &trace.spans {
                 if let Some(parent_id) = &span.parent_span_id {
                     // Find parent span
-                    if let Some(parent_span) = trace.spans.iter().find(|s| s.span_id == *parent_id) {
+                    if let Some(parent_span) = trace.spans.iter().find(|s| s.span_id == *parent_id)
+                    {
                         if let (Some(&source_id), Some(&target_id)) = (
                             service_nodes.get(&parent_span.service_name),
                             service_nodes.get(&span.service_name),
@@ -158,7 +154,7 @@ impl OtelCollectorClient {
                             if source_id != target_id {
                                 let edge = Edge::new(EdgeType::Calls, source_id, target_id)
                                     .with_latency(span.duration_ms)
-                                    .with_confidence(0.95)  // High confidence from actual traces
+                                    .with_confidence(0.95) // High confidence from actual traces
                                     .add_discovered_via("otel-trace");
 
                                 graph.add_edge(edge)?;
@@ -266,8 +262,7 @@ mod tests {
 
     #[test]
     fn test_otel_http_protocol() {
-        let client = OtelCollectorClient::new("http://localhost:4318".to_string())
-            .with_http();
+        let client = OtelCollectorClient::new("http://localhost:4318".to_string()).with_http();
         assert_eq!(client.protocol, OtelProtocol::HTTP);
     }
 

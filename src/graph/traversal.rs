@@ -1,7 +1,7 @@
-use std::collections::{VecDeque, HashSet};
-use serde::{Deserialize, Serialize};
 use super::node::NodeId;
-use crate::error::{Error, Result};
+use crate::error::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashSet, VecDeque};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraversalResult {
@@ -12,10 +12,7 @@ pub struct TraversalResult {
 pub struct BfsTraversal;
 
 impl BfsTraversal {
-    pub fn traverse(
-        graph: &crate::graph::Graph,
-        start: NodeId,
-    ) -> Result<TraversalResult> {
+    pub fn traverse(graph: &crate::graph::Graph, start: NodeId) -> Result<TraversalResult> {
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
         let mut depth_levels = vec![vec![]];
@@ -93,10 +90,7 @@ impl BfsTraversal {
 pub struct DfsTraversal;
 
 impl DfsTraversal {
-    pub fn traverse(
-        graph: &crate::graph::Graph,
-        start: NodeId,
-    ) -> Result<TraversalResult> {
+    pub fn traverse(graph: &crate::graph::Graph, start: NodeId) -> Result<TraversalResult> {
         let mut visited = HashSet::new();
         let mut stack = vec![(start, 0)];
         let mut depth_levels = vec![vec![]];
@@ -172,10 +166,10 @@ impl TopoSort {
         let mut rec_stack = HashSet::new();
 
         for node in graph.nodes() {
-            if !visited.contains(&node.id) {
-                if Self::has_cycle_util(graph, node.id, &mut visited, &mut rec_stack)? {
-                    return Ok(true);
-                }
+            if !visited.contains(&node.id)
+                && Self::has_cycle_util(graph, node.id, &mut visited, &mut rec_stack)?
+            {
+                return Ok(true);
             }
         }
 
@@ -210,7 +204,7 @@ impl TopoSort {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{Graph, Node, Edge, NodeType, EdgeType};
+    use crate::graph::{Edge, EdgeType, Graph, Node, NodeType};
 
     fn create_test_graph() -> Graph {
         let mut graph = Graph::new();

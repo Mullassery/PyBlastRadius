@@ -1,9 +1,9 @@
-use crate::error::{Error, Result};
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use petgraph::graph::{DiGraph, NodeIndex};
-use super::node::{Node, NodeId, NodeProperties};
 use super::edge::{Edge, EdgeId, EdgeType};
+use super::node::{Node, NodeId, NodeProperties};
+use crate::error::{Error, Result};
+use petgraph::graph::{DiGraph, NodeIndex};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphMetrics {
@@ -42,12 +42,17 @@ impl Graph {
     }
 
     pub fn add_edge(&mut self, edge: Edge) -> Result<EdgeId> {
-        let source_idx = self.node_indices.get(&edge.source)
+        let source_idx = self
+            .node_indices
+            .get(&edge.source)
             .ok_or_else(|| Error::graph_error("Source node not found"))?;
-        let target_idx = self.node_indices.get(&edge.target)
+        let target_idx = self
+            .node_indices
+            .get(&edge.target)
             .ok_or_else(|| Error::graph_error("Target node not found"))?;
 
-        self.petgraph.add_edge(*source_idx, *target_idx, edge.edge_type);
+        self.petgraph
+            .add_edge(*source_idx, *target_idx, edge.edge_type);
         let edge_id = edge.id;
         self.edges.insert(edge_id, edge);
 
@@ -87,49 +92,59 @@ impl Graph {
     }
 
     pub fn get_neighbors(&self, node_id: &NodeId) -> Result<Vec<NodeId>> {
-        let idx = self.node_indices.get(node_id)
+        let idx = self
+            .node_indices
+            .get(node_id)
             .ok_or_else(|| Error::graph_error("Node not found"))?;
 
-        let neighbors: Vec<NodeId> = self.petgraph
+        let neighbors: Vec<NodeId> = self
+            .petgraph
             .neighbors(*idx)
-            .filter_map(|neighbor_idx| {
-                self.petgraph.node_weight(neighbor_idx).copied()
-            })
+            .filter_map(|neighbor_idx| self.petgraph.node_weight(neighbor_idx).copied())
             .collect();
 
         Ok(neighbors)
     }
 
     pub fn get_predecessors(&self, node_id: &NodeId) -> Result<Vec<NodeId>> {
-        let idx = self.node_indices.get(node_id)
+        let idx = self
+            .node_indices
+            .get(node_id)
             .ok_or_else(|| Error::graph_error("Node not found"))?;
 
-        let predecessors: Vec<NodeId> = self.petgraph
+        let predecessors: Vec<NodeId> = self
+            .petgraph
             .neighbors_directed(*idx, petgraph::Direction::Incoming)
-            .filter_map(|pred_idx| {
-                self.petgraph.node_weight(pred_idx).copied()
-            })
+            .filter_map(|pred_idx| self.petgraph.node_weight(pred_idx).copied())
             .collect();
 
         Ok(predecessors)
     }
 
     pub fn get_edges_from(&self, source_id: &NodeId) -> Result<Vec<&Edge>> {
-        Ok(self.edges.values()
+        Ok(self
+            .edges
+            .values()
             .filter(|e| e.source == *source_id)
             .collect())
     }
 
     pub fn get_edges_to(&self, target_id: &NodeId) -> Result<Vec<&Edge>> {
-        Ok(self.edges.values()
+        Ok(self
+            .edges
+            .values()
             .filter(|e| e.target == *target_id)
             .collect())
     }
 
     pub fn has_path(&self, from: &NodeId, to: &NodeId) -> Result<bool> {
-        let from_idx = self.node_indices.get(from)
+        let from_idx = self
+            .node_indices
+            .get(from)
             .ok_or_else(|| Error::graph_error("Source node not found"))?;
-        let to_idx = self.node_indices.get(to)
+        let to_idx = self
+            .node_indices
+            .get(to)
             .ok_or_else(|| Error::graph_error("Target node not found"))?;
 
         Ok(petgraph::algo::has_path_connecting(
@@ -169,7 +184,9 @@ impl Graph {
     }
 
     pub fn remove_node(&mut self, node_id: &NodeId) -> Result<Node> {
-        let node = self.nodes.remove(node_id)
+        let node = self
+            .nodes
+            .remove(node_id)
             .ok_or_else(|| Error::not_found("Node not found"))?;
 
         if let Some(idx) = self.node_indices.remove(node_id) {
@@ -177,13 +194,15 @@ impl Graph {
         }
 
         // Remove associated edges
-        self.edges.retain(|_, e| e.source != *node_id && e.target != *node_id);
+        self.edges
+            .retain(|_, e| e.source != *node_id && e.target != *node_id);
 
         Ok(node)
     }
 
     pub fn remove_edge(&mut self, edge_id: &EdgeId) -> Result<Edge> {
-        self.edges.remove(edge_id)
+        self.edges
+            .remove(edge_id)
             .ok_or_else(|| Error::not_found("Edge not found"))
     }
 
@@ -214,7 +233,9 @@ impl Graph {
     where
         F: FnOnce(&mut NodeProperties),
     {
-        let node = self.nodes.get_mut(node_id)
+        let node = self
+            .nodes
+            .get_mut(node_id)
             .ok_or_else(|| Error::not_found("Node not found"))?;
         f(&mut node.properties);
         Ok(())
@@ -272,9 +293,13 @@ mod tests {
         use crate::graph::edge::Edge;
 
         let mut source_graph = Graph::new();
-        let n1 = source_graph.add_node(Node::service("kube-service")).unwrap();
+        let n1 = source_graph
+            .add_node(Node::service("kube-service"))
+            .unwrap();
         let n2 = source_graph.add_node(Node::database("kube-db")).unwrap();
-        source_graph.add_edge(Edge::new(EdgeType::Queries, n1, n2)).unwrap();
+        source_graph
+            .add_edge(Edge::new(EdgeType::Queries, n1, n2))
+            .unwrap();
 
         let mut combined = Graph::new();
         let n3 = combined.add_node(Node::service("tf-service")).unwrap();

@@ -1,11 +1,11 @@
 use clap::{Parser, Subcommand};
 use pyblastradius::graph::node::NodeId;
-use serde::Deserialize;
 use pyblastradius::{
-    about, AirflowDiscoverer, BlastRadiusAnalyzer, CriticalityScorer, Error,
-    ExportFormat, FailureType, Graph, GraphExporter, GraphImporter, KubernetesDiscoverer,
-    Simulator, TerraformDiscoverer,
+    about, AirflowDiscoverer, BlastRadiusAnalyzer, CriticalityScorer, Error, ExportFormat,
+    FailureType, Graph, GraphExporter, GraphImporter, KubernetesDiscoverer, Simulator,
+    TerraformDiscoverer,
 };
+use serde::Deserialize;
 use std::path::PathBuf;
 
 #[cfg(feature = "otlp-traces")]
@@ -133,7 +133,11 @@ fn find_node_by_name(graph: &Graph, name: &str) -> Option<NodeId> {
     graph
         .nodes()
         .find(|n| n.name == name)
-        .or_else(|| graph.nodes().find(|n| n.name.starts_with(&format!("{}.", name))))
+        .or_else(|| {
+            graph
+                .nodes()
+                .find(|n| n.name.starts_with(&format!("{}.", name)))
+        })
         .map(|n| n.id)
 }
 
@@ -240,7 +244,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             #[cfg(not(feature = "otlp-traces"))]
             if otlp.is_some() {
-                eprintln!("⚠️  --otlp requires the `otlp-traces` feature (not enabled in this build)");
+                eprintln!(
+                    "⚠️  --otlp requires the `otlp-traces` feature (not enabled in this build)"
+                );
             }
 
             if sources_scanned == 0 {
@@ -278,7 +284,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("🎯 Blast Radius Analysis for {}\n", service);
             println!("   Directly Impacted: {}", result.directly_impacted.len());
-            println!("   Indirectly Impacted: {}", result.indirectly_impacted.len());
+            println!(
+                "   Indirectly Impacted: {}",
+                result.indirectly_impacted.len()
+            );
             println!(
                 "   Blast Radius Score: {:.1}/100",
                 result.blast_radius_score
@@ -314,7 +323,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let filtered: Vec<_> = scores
                 .into_iter()
                 .filter(|score| {
-                    threshold.is_none() || score.criticality_score >= threshold.unwrap_or(0.0) * 100.0
+                    threshold.is_none()
+                        || score.criticality_score >= threshold.unwrap_or(0.0) * 100.0
                 })
                 .collect();
 
@@ -354,7 +364,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if let Some(output_path) = output {
                 std::fs::write(&output_path, &rendered)?;
-                println!("  Output: {:?}\n  ✅ Graph visualization generated", output_path);
+                println!(
+                    "  Output: {:?}\n  ✅ Graph visualization generated",
+                    output_path
+                );
             } else {
                 println!();
                 println!("{}", rendered);
@@ -416,12 +429,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .map(String::from)
                 });
 
-            match service_name.as_deref().and_then(|name| find_node_by_name(&graph_data, name)) {
+            match service_name
+                .as_deref()
+                .and_then(|name| find_node_by_name(&graph_data, name))
+            {
                 Some(node_id) => {
                     let node = graph_data.get_node(&node_id).unwrap();
                     let blast_result = BlastRadiusAnalyzer::analyze(&graph_data, node_id)?;
 
-                    let risk = if node.properties.criticality > 0.8 || blast_result.blast_radius_score > 50.0 {
+                    let risk = if node.properties.criticality > 0.8
+                        || blast_result.blast_radius_score > 50.0
+                    {
                         "HIGH"
                     } else if node.properties.criticality > 0.5 {
                         "MEDIUM"
@@ -431,8 +449,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     println!("  Service: {}", node.name);
                     println!("  Criticality: {:.2}", node.properties.criticality);
-                    println!("  Blast Radius Score: {:.1}/100", blast_result.blast_radius_score);
-                    println!("  Downstream Impact: {} services", blast_result.directly_impacted.len() + blast_result.indirectly_impacted.len());
+                    println!(
+                        "  Blast Radius Score: {:.1}/100",
+                        blast_result.blast_radius_score
+                    );
+                    println!(
+                        "  Downstream Impact: {} services",
+                        blast_result.directly_impacted.len()
+                            + blast_result.indirectly_impacted.len()
+                    );
                     println!("  Risk Level: {}", risk);
                     if risk == "HIGH" {
                         println!("\n  ⚠️  Recommend deploying during your lowest-traffic window and having rollback ready.");
@@ -441,7 +466,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 None => {
-                    println!("  ⚠️  Could not identify this manifest's service in the dependency graph.");
+                    println!(
+                        "  ⚠️  Could not identify this manifest's service in the dependency graph."
+                    );
                     println!("     Risk Level: UNKNOWN (new or unrecognized service — no historical blast-radius data)");
                 }
             }

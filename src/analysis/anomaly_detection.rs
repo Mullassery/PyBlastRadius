@@ -1,6 +1,6 @@
 use crate::error::Result;
-use crate::graph::Graph;
 use crate::graph::node::NodeId;
+use crate::graph::Graph;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -21,9 +21,9 @@ pub struct DetectedAnomaly {
     pub node_id: NodeId,
     pub node_name: String,
     pub anomaly_type: AnomalyType,
-    pub severity: f32,  // 0-1.0, higher = more severe
-    pub confidence: f32,  // 0-1.0, prediction confidence
-    pub predicted_ttf: u32,  // Time to failure in minutes
+    pub severity: f32,      // 0-1.0, higher = more severe
+    pub confidence: f32,    // 0-1.0, prediction confidence
+    pub predicted_ttf: u32, // Time to failure in minutes
     pub evidence: Vec<String>,
 }
 
@@ -58,9 +58,9 @@ impl AnomalyDetector {
             if let Some(latency) = edge.properties.latency_ms {
                 // Baseline for different service types
                 let baseline = match graph.get_node(&edge.target).map(|n| &n.node_type) {
-                    Some(crate::graph::NodeType::Database) => 100.0,  // DBs typically ~50-100ms
-                    Some(crate::graph::NodeType::Cache) => 10.0,      // Cache typically ~5-10ms
-                    _ => 50.0,  // Default baseline
+                    Some(crate::graph::NodeType::Database) => 100.0, // DBs typically ~50-100ms
+                    Some(crate::graph::NodeType::Cache) => 10.0,     // Cache typically ~5-10ms
+                    _ => 50.0,                                       // Default baseline
                 };
 
                 // If latency > 2x baseline, it's a spike
@@ -98,7 +98,7 @@ impl AnomalyDetector {
                 let normal_threshold = 0.01;
 
                 if error_rate > normal_threshold {
-                    let severity = (error_rate / 0.1).min(1.0);  // 10% is severe
+                    let severity = (error_rate / 0.1).min(1.0); // 10% is severe
 
                     if let Some(target) = graph.get_node(&edge.target) {
                         anomalies.push(DetectedAnomaly {
@@ -148,7 +148,10 @@ impl AnomalyDetector {
                     confidence: 0.65,
                     predicted_ttf: Self::estimate_ttf(severity),
                     evidence: vec![
-                        format!("{} downstream services depending on this node", downstream_count),
+                        format!(
+                            "{} downstream services depending on this node",
+                            downstream_count
+                        ),
                         "High load concentration detected".to_string(),
                     ],
                 });
@@ -160,7 +163,7 @@ impl AnomalyDetector {
 
     /// Detect unusual traffic patterns
     fn detect_traffic_anomalies(_graph: &Graph) -> Result<Vec<DetectedAnomaly>> {
-        let mut anomalies = Vec::new();
+        let anomalies = Vec::new();
 
         // In production: Compare current traffic vs. baseline
         // Detect:
@@ -175,11 +178,11 @@ impl AnomalyDetector {
     /// Estimate time to failure based on severity
     fn estimate_ttf(severity: f32) -> u32 {
         match severity {
-            s if s > 0.9 => 5,    // Critical: 5 minutes
-            s if s > 0.7 => 15,   // High: 15 minutes
-            s if s > 0.5 => 30,   // Medium: 30 minutes
-            s if s > 0.3 => 60,   // Low: 60 minutes
-            _ => 120,              // Very low: 120 minutes
+            s if s > 0.9 => 5,  // Critical: 5 minutes
+            s if s > 0.7 => 15, // High: 15 minutes
+            s if s > 0.5 => 30, // Medium: 30 minutes
+            s if s > 0.3 => 60, // Low: 60 minutes
+            _ => 120,           // Very low: 120 minutes
         }
     }
 }
@@ -202,21 +205,19 @@ impl ConsensusAnomalyDetector {
             .chain(error_anomalies)
             .chain(resource_anomalies)
         {
-            combined
-                .entry(anom.node_id)
-                .or_insert_with(Vec::new)
-                .push(anom);
+            combined.entry(anom.node_id).or_default().push(anom);
         }
 
         // Filter: Keep only anomalies detected by multiple methods
         combined
-            .into_iter()
-            .flat_map(|(_, mut anoms)| {
+            .into_values()
+            .flat_map(|mut anoms| {
                 if anoms.len() > 1 {
                     // Combine evidence and increase confidence
                     let first = anoms.remove(0);
                     let mut combined_anom = first;
-                    combined_anom.confidence = (combined_anom.confidence * anoms.len() as f32).min(1.0);
+                    combined_anom.confidence =
+                        (combined_anom.confidence * anoms.len() as f32).min(1.0);
 
                     for anom in anoms {
                         combined_anom.evidence.extend(anom.evidence);
@@ -246,15 +247,19 @@ mod tests {
             .unwrap();
 
         let mut edge = crate::graph::Edge::new(crate::graph::EdgeType::Queries, _n1, n2);
-        edge.properties.latency_ms = Some(250.0);  // High latency
-        edge.properties.error_rate = Some(0.05);   // 5% errors
+        edge.properties.latency_ms = Some(250.0); // High latency
+        edge.properties.error_rate = Some(0.05); // 5% errors
         graph.add_edge(edge).unwrap();
 
         let anomalies = AnomalyDetector::detect(&graph).unwrap();
 
         assert!(!anomalies.is_empty());
-        assert!(anomalies.iter().any(|a| a.anomaly_type == AnomalyType::LatencySpike));
-        assert!(anomalies.iter().any(|a| a.anomaly_type == AnomalyType::ErrorRateIncrease));
+        assert!(anomalies
+            .iter()
+            .any(|a| a.anomaly_type == AnomalyType::LatencySpike));
+        assert!(anomalies
+            .iter()
+            .any(|a| a.anomaly_type == AnomalyType::ErrorRateIncrease));
     }
 
     #[test]

@@ -1,42 +1,50 @@
+pub mod anomaly_detection;
 pub mod blast_radius;
 pub mod criticality;
-pub mod simulator;
 pub mod hidden_dependencies;
-pub mod anomaly_detection;
+pub mod simulator;
 
-pub use blast_radius::{BlastRadius, BlastRadiusAnalyzer, BlastRadiusResult};
-pub use criticality::{CriticalityScorer, CriticalityScore};
-pub use simulator::{Simulator, SimulationResult, FailureType};
-pub use hidden_dependencies::{HiddenDependency, HiddenDependencyDetector, DependencyConfidenceScorer};
 pub use anomaly_detection::{AnomalyDetector, AnomalyType, DetectedAnomaly};
+pub use blast_radius::{BlastRadius, BlastRadiusAnalyzer, BlastRadiusResult};
+pub use criticality::{CriticalityScore, CriticalityScorer};
+pub use hidden_dependencies::{
+    DependencyConfidenceScorer, HiddenDependency, HiddenDependencyDetector,
+};
+pub use simulator::{FailureType, SimulationResult, Simulator};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{Graph, Node, Edge, EdgeType};
+    use crate::graph::{Edge, EdgeType, Graph, Node};
 
     fn create_sample_graph() -> Graph {
         let mut graph = Graph::new();
 
-        let api = graph.add_node(Node::service("api-server")
-            .with_criticality(0.9)
-        ).unwrap();
+        let api = graph
+            .add_node(Node::service("api-server").with_criticality(0.9))
+            .unwrap();
 
-        let auth = graph.add_node(Node::service("auth-service")
-            .with_criticality(0.95)
-        ).unwrap();
+        let auth = graph
+            .add_node(Node::service("auth-service").with_criticality(0.95))
+            .unwrap();
 
-        let db = graph.add_node(Node::database("postgresql")
-            .with_criticality(0.98)
-        ).unwrap();
+        let db = graph
+            .add_node(Node::database("postgresql").with_criticality(0.98))
+            .unwrap();
 
-        let cache = graph.add_node(Node::service("redis")
-            .with_criticality(0.7)
-        ).unwrap();
+        let cache = graph
+            .add_node(Node::service("redis").with_criticality(0.7))
+            .unwrap();
 
-        graph.add_edge(Edge::new(EdgeType::Calls, api, auth).with_criticality(true)).unwrap();
-        graph.add_edge(Edge::new(EdgeType::Calls, auth, db).with_criticality(true)).unwrap();
-        graph.add_edge(Edge::new(EdgeType::Calls, api, cache).with_criticality(false)).unwrap();
+        graph
+            .add_edge(Edge::new(EdgeType::Calls, api, auth).with_criticality(true))
+            .unwrap();
+        graph
+            .add_edge(Edge::new(EdgeType::Calls, auth, db).with_criticality(true))
+            .unwrap();
+        graph
+            .add_edge(Edge::new(EdgeType::Calls, api, cache).with_criticality(false))
+            .unwrap();
 
         graph
     }
@@ -58,12 +66,8 @@ mod tests {
         assert!(scores.len() > 0);
 
         // DB should have highest criticality
-        let db_node = graph.nodes()
-            .find(|n| n.name == "postgresql")
-            .unwrap();
-        let db_score = scores.iter()
-            .find(|s| s.node_id == db_node.id)
-            .unwrap();
+        let db_node = graph.nodes().find(|n| n.name == "postgresql").unwrap();
+        let db_score = scores.iter().find(|s| s.node_id == db_node.id).unwrap();
 
         assert!(db_score.criticality_score > 0.8);
     }

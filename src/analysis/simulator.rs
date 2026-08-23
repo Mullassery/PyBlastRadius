@@ -1,8 +1,8 @@
 use crate::error::Result;
-use crate::graph::Graph;
 use crate::graph::node::NodeId;
+use crate::graph::Graph;
 use serde::{Deserialize, Serialize};
-use std::collections::{VecDeque, HashSet};
+use std::collections::{HashSet, VecDeque};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FailureType {
@@ -34,7 +34,7 @@ impl Simulator {
     ) -> Result<SimulationResult> {
         let cascade = Self::simulate_cascade(graph, source_node_id)?;
 
-        let source_node = graph
+        let _source_node = graph
             .get_node(&source_node_id)
             .ok_or_else(|| crate::error::Error::not_found("Source node not found"))?;
 
@@ -42,13 +42,10 @@ impl Simulator {
 
         let affected_services: Vec<String> = cascade
             .iter()
-            .filter_map(|&node_id| {
-                graph.get_node(&node_id).map(|n| n.name.clone())
-            })
+            .filter_map(|&node_id| graph.get_node(&node_id).map(|n| n.name.clone()))
             .collect();
 
-        let business_impact_score =
-            Self::calculate_business_impact(graph, &cascade)?;
+        let business_impact_score = Self::calculate_business_impact(graph, &cascade)?;
 
         Ok(SimulationResult {
             source_node: source_node_id,
@@ -79,9 +76,9 @@ impl Simulator {
 
                 // Check if the edge to this neighbor is critical
                 let edges = graph.get_edges_from(&node_id)?;
-                let has_critical_edge = edges.iter().any(|e| {
-                    e.target == neighbor && e.properties.is_critical
-                });
+                let has_critical_edge = edges
+                    .iter()
+                    .any(|e| e.target == neighbor && e.properties.is_critical);
 
                 if has_critical_edge {
                     cascade.push(neighbor);
@@ -128,7 +125,7 @@ impl Simulator {
     ) -> Result<SimulationResult> {
         let cascade = Self::simulate_cascade_with_limit(graph, source_node_id, max_cascade_depth)?;
 
-        let source_node = graph
+        let _source_node = graph
             .get_node(&source_node_id)
             .ok_or_else(|| crate::error::Error::not_found("Source node not found"))?;
 
@@ -136,9 +133,7 @@ impl Simulator {
 
         let affected_services: Vec<String> = cascade
             .iter()
-            .filter_map(|&node_id| {
-                graph.get_node(&node_id).map(|n| n.name.clone())
-            })
+            .filter_map(|&node_id| graph.get_node(&node_id).map(|n| n.name.clone()))
             .collect();
 
         let business_impact_score = Self::calculate_business_impact(graph, &cascade)?;
@@ -162,7 +157,7 @@ impl Simulator {
         let mut cascade = vec![source_node_id];
         let mut queue = VecDeque::new();
         let mut visited = HashSet::new();
-        let mut depth = 0;
+        let _depth = 0;
 
         queue.push_back((source_node_id, 0));
         visited.insert(source_node_id);
@@ -180,9 +175,9 @@ impl Simulator {
                 }
 
                 let edges = graph.get_edges_from(&node_id)?;
-                let has_critical_edge = edges.iter().any(|e| {
-                    e.target == neighbor && e.properties.is_critical
-                });
+                let has_critical_edge = edges
+                    .iter()
+                    .any(|e| e.target == neighbor && e.properties.is_critical);
 
                 if has_critical_edge {
                     cascade.push(neighbor);
@@ -198,7 +193,7 @@ impl Simulator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{Graph, Node, Edge, EdgeType};
+    use crate::graph::{Edge, EdgeType, Graph, Node};
 
     #[test]
     fn test_cascade_simulation() {
@@ -229,8 +224,12 @@ mod tests {
         let n2 = graph.add_node(Node::service("s2")).unwrap();
         let n3 = graph.add_node(Node::service("s3")).unwrap();
 
-        graph.add_edge(Edge::new(EdgeType::Calls, n1, n2).with_criticality(true)).unwrap();
-        graph.add_edge(Edge::new(EdgeType::Calls, n2, n3).with_criticality(true)).unwrap();
+        graph
+            .add_edge(Edge::new(EdgeType::Calls, n1, n2).with_criticality(true))
+            .unwrap();
+        graph
+            .add_edge(Edge::new(EdgeType::Calls, n2, n3).with_criticality(true))
+            .unwrap();
 
         let result =
             Simulator::simulate_with_time_limit(&graph, n1, FailureType::Outage, 1).unwrap();
