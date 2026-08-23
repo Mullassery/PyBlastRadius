@@ -101,6 +101,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # PyO3 0.23.5's build script auto-detects the system Python and
+      # rejects anything newer than 3.13 ("configured Python interpreter
+      # version (3.14) is newer than PyO3's maximum supported version").
+      # macos-latest recently started defaulting python3 to 3.14, breaking
+      # this job -- pin an explicit, supported version rather than relying
+      # on whatever the runner image happens to ship by default.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
