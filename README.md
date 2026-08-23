@@ -149,7 +149,7 @@ with open("graph.json", "w") as f:
 
 PyBlastRadius orchestrates an open-source observability ecosystem:
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │         PyBlastRadius Orchestration Layer        │
 ├─────────────────────────────────────────────────┤
