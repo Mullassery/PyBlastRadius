@@ -26,6 +26,8 @@ Not yet implemented (present as scaffolding/placeholders, listed here so you don
 - **`pyblastradius.integrations`** — `OtelCollectorClient` and `StatGuardianClient` are placeholders that return empty/fake data; `DbtManifestParser` genuinely parses a dbt `manifest.json` you already have on disk and is real.
 - **GraphQL API** — not exposed anywhere; the Rust crate has a query-string builder (`src/api/graphql.rs`) that nothing serves or executes.
 - **Chat and incident-management integrations** — the Rust structs (`src/api/integrations.rs`) build correct webhook payloads for chat notifications and incident-management alerting, but never send them (the HTTP calls are commented out), and are not exposed to Python at all yet.
+- **Terraform discovery uses regex, not an HCL parser** — `src/discovery/terraform.rs` explicitly comments "For MVP: Use simple regex parsing instead of full HCL parser," matching resource blocks via `regex::Regex` string patterns; no `hcl`/`hcl-rs` crate is a dependency. Moot until `TerraformDiscoverer` is wired up (see the empty-graph limitation above), but worth fixing in the same pass.
+- **No benchmark/stress tests for large interconnected graphs** — `criterion` and `[profile.bench]` are declared in `Cargo.toml` but there's no `benches/` directory or `[[bench]]` target; all existing tests use small fixture graphs, nothing at the scale this tool is meant to operate at.
 
 ## Quick Start
 
