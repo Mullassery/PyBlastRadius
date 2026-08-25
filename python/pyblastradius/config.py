@@ -194,9 +194,9 @@ class Config:
 
     def create_discoverers(self) -> List:
         """Create discoverer instances from configuration"""
+        from pyblastradius import TerraformDiscoverer
         from pyblastradius.discovery import (
             KubernetesDiscoverer,
-            TerraformDiscoverer,
             AirflowDiscoverer,
             OtelDiscoverer,
         )

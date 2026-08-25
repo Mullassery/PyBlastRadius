@@ -28,10 +28,16 @@ try:
 except ImportError:
     raise ImportError("FastAPI is required for REST API: pip install fastapi uvicorn")
 
-from pyblastradius import Graph, BlastRadiusAnalyzer, CriticalityScorer, FailureType, Simulator
+from pyblastradius import (
+    Graph,
+    BlastRadiusAnalyzer,
+    CriticalityScorer,
+    FailureType,
+    Simulator,
+    TerraformDiscoverer,
+)
 from pyblastradius.discovery import (
     KubernetesDiscoverer,
-    TerraformDiscoverer,
     AirflowDiscoverer,
     OtelDiscoverer,
 )

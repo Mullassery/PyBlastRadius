@@ -18,16 +18,15 @@ Working today, backed by the real Rust engine (`pyblastradius._core`):
 - **Graph import/export** — JSON round-trip and Graphviz DOT export
 - **REST API server** — FastAPI server with real bearer-token auth and an explicit CORS allowlist (`pyblastradius server`)
 - **CLI** — `analyze`, `criticality`, `simulate`, `visualize` commands operate on a graph you build or load from JSON
+- **Terraform discovery** — `TerraformDiscoverer` (used by `pyblastradius scan terraform://path=...`, `type: terraform` in `blastradius.yml`, and directly as `pyblastradius.TerraformDiscoverer`) parses real `.tf` files via `hcl-rs`, discovers any `resource "type" "name" { ... }` block (not limited to a handful of hardcoded AWS types), and derives real dependency edges from actual resource references found in each resource's own attribute values (`aws_db_instance.x.endpoint` bare traversals, and `"${aws_db_instance.x.endpoint}"` interpolated strings) — not a hardcoded example dependency list. Benchmarked in `benches/large_graph.rs` on graphs up to 1,000 nodes.
 
 Not yet implemented (present as scaffolding/placeholders, listed here so you don't spend time debugging them):
 
-- **Dependency discovery** — `KubernetesDiscoverer`, `TerraformDiscoverer`, `AirflowDiscoverer`, `OtelDiscoverer` (used by `pyblastradius scan`) currently always return an empty graph. There is no YAML/HCL parsing or live cluster/API connection behind them yet.
+- **Dependency discovery (Kubernetes/Airflow/Otel)** — `KubernetesDiscoverer`, `AirflowDiscoverer`, `OtelDiscoverer` (used by `pyblastradius scan`) currently always return an empty graph. There is no YAML parsing or live cluster/API connection behind them yet. (Terraform discovery is real -- see Features above.)
 - **Hidden Dependency Detection / Anomaly Detection** — `HiddenDependencyDetector` and `AnomalyDetector` always return empty results; they are not wired to any metrics/trace source.
 - **`pyblastradius.integrations`** — `OtelCollectorClient` and `StatGuardianClient` are placeholders that return empty/fake data; `DbtManifestParser` genuinely parses a dbt `manifest.json` you already have on disk and is real.
 - **GraphQL API** — not exposed anywhere; the Rust crate has a query-string builder (`src/api/graphql.rs`) that nothing serves or executes.
 - **Chat and incident-management integrations** — the Rust structs (`src/api/integrations.rs`) build correct webhook payloads for chat notifications and incident-management alerting, but never send them (the HTTP calls are commented out), and are not exposed to Python at all yet.
-- **Terraform discovery uses regex, not an HCL parser** — `src/discovery/terraform.rs` explicitly comments "For MVP: Use simple regex parsing instead of full HCL parser," matching resource blocks via `regex::Regex` string patterns; no `hcl`/`hcl-rs` crate is a dependency. Moot until `TerraformDiscoverer` is wired up (see the empty-graph limitation above), but worth fixing in the same pass.
-- **No benchmark/stress tests for large interconnected graphs** — `criterion` and `[profile.bench]` are declared in `Cargo.toml` but there's no `benches/` directory or `[[bench]]` target; all existing tests use small fixture graphs, nothing at the scale this tool is meant to operate at.
 
 ## Quick Start
 
@@ -49,14 +48,17 @@ pip install pyblastradius[server]
 
 ### CLI Usage
 
-`scan` is wired up end-to-end but its discoverers are not implemented yet
-(see Features above) — it will run without error and produce an empty
-graph. To analyze something real today, build a graph via the Python API
-below (or hand-write one and export it with `graph.to_json()`) and feed
-that JSON file into `analyze`/`criticality`/`simulate`.
+`scan`'s `terraform://` source is real (see Features above) and will
+discover actual resources/dependencies from `.tf` files at the given path.
+`kubernetes://`/`airflow://`/`otel://` sources still always produce an
+empty graph — no YAML parsing or live cluster/API connection behind them
+yet. To analyze something real today with those, build a graph via the
+Python API below (or hand-write one and export it with `graph.to_json()`)
+and feed that JSON file into `analyze`/`criticality`/`simulate`.
 
 ```bash
-# Not yet functional - always produces an empty graph (see Features)
+# terraform:// is real; kubernetes:// still always produces an empty graph
+# for its part of the discovered graph (see Features)
 pyblastradius scan \
   kubernetes://kubeconfig=~/.kube/config \
   terraform://path=./infrastructure
@@ -209,9 +211,10 @@ PyBlastRadius provides:
 - **Zero vendor lock-in** with an open-source stack
 
 These are the goals the project is designed around, not measured results —
-there are no discovery engines wired up yet to generate the "automated
-dependency discovery" this depends on. Treat this section as intent, not a
-claim about the current release.
+Terraform is the only discovery engine wired up to real parsing so far; the
+"automated dependency discovery" this depends on more broadly (Kubernetes,
+Airflow, OpenTelemetry) still isn't. Treat this section as intent, not a
+full claim about the current release.
 
 ## Platform Support
 
@@ -221,7 +224,7 @@ Discovery source integration status (i.e. what `pyblastradius scan` /
 | Discovery Source | Status | Notes |
 |-----------------|--------|----------|
 | Kubernetes | Not implemented | `discover()` always returns an empty graph; no manifest parsing or API calls |
-| Terraform | Not implemented | `discover()` always returns an empty graph; no HCL parsing |
+| Terraform | **Real** | `discover()` parses actual `.tf` files via `hcl-rs` and derives real dependency edges from resource references (see Features above) |
 | Airflow | Not implemented | `discover()` always returns an empty graph |
 | OpenTelemetry | Not implemented | `discover()` always returns an empty graph (there is a separate, real Rust OTLP client used by `examples/cli.rs`, but it is not exposed to the Python package) |
 | dbt | Partial | `DbtManifestParser` genuinely parses a local `manifest.json` for column lineage |
@@ -275,10 +278,15 @@ the analysis results from `BlastRadiusAnalyzer`/`Simulator`.
 
 ## Performance
 
-No benchmarks have been run against this release. Numbers below are
-targets, not measurements — treat them as design goals, not verified
-performance. `cargo bench` benchmark scaffolding exists in the crate but
-results aren't published here yet.
+Numbers below are targets, not verified end-to-end (Python-visible)
+measurements — treat them as design goals. `cargo bench` benchmark
+scaffolding now exists (`benches/large_graph.rs`; run with `cargo bench`)
+and exercises `BlastRadiusAnalyzer`/`CriticalityScorer`/graph construction
+on layered graphs up to 1,000 nodes at the Rust level — a spot-check run
+put blast-radius analysis at ~10µs and criticality scoring at ~85µs on a
+1,000-node graph, comfortably under the targets below, though that's a
+core-computation-only number (no pyo3 call overhead, no formal published
+run) rather than a rigorous end-to-end benchmark.
 
 | Operation | Target |
 |-----------|--------|
@@ -309,7 +317,8 @@ reading the source directly; the Features, Platform Support, API Examples, and I
 sections above give the full detail on each:
 
 - Dependency discovery (`pyblastradius scan` and the `*Discoverer` classes) always returns an
-  empty graph — no Kubernetes/Terraform/Airflow/OTLP parsing is implemented yet.
+  empty graph for Kubernetes/Airflow/OTLP sources — no parsing or live connection is implemented
+  yet for those. Terraform discovery is real (see Features/Platform Support above).
 - `HiddenDependencyDetector` is a mix: `detect_from_trace_gaps` (fan-out + async-keyword
   heuristic) and `detect_semantic_coupling` (name-similarity heuristic) are real logic, not
   stubs — but two of its four methods, `detect_from_query_logs` and `detect_from_config`, are

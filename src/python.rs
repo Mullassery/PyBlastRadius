@@ -752,6 +752,51 @@ impl PySimulator {
 }
 
 // ---------------------------------------------------------------------
+// Discovery
+// ---------------------------------------------------------------------
+
+/// Real Terraform (.tf) dependency discovery, via `hcl-rs` parsing and
+/// reference-based dependency detection (see `discovery::terraform`).
+///
+/// Previously the only `TerraformDiscoverer` reachable from Python was a
+/// pure-Python placeholder in `pyblastradius.discovery` that walked
+/// matching files and discarded their contents (`# For now, just create
+/// mock nodes` / `pass`), always returning an empty graph -- the real Rust
+/// implementation existed but was never exposed via pyo3 at all, so
+/// nothing could reach it. `pyblastradius/__init__.py` now imports this
+/// one instead.
+#[pyclass(name = "TerraformDiscoverer")]
+pub struct PyTerraformDiscoverer {
+    inner: crate::discovery::terraform::TerraformDiscoverer,
+}
+
+#[pymethods]
+impl PyTerraformDiscoverer {
+    #[new]
+    #[pyo3(signature = (path=".".to_string(), backend=None))]
+    fn new(path: String, backend: Option<String>) -> Self {
+        // `backend` (e.g. "local"/"s3" Terraform state backend) is accepted
+        // for interface compatibility with the old Python stub's
+        // constructor, but discovery here works directly from the real
+        // *.tf source files on disk, not remote state, so it has no effect
+        // on what gets discovered.
+        let _ = backend;
+        PyTerraformDiscoverer {
+            inner: crate::discovery::terraform::TerraformDiscoverer::new(path),
+        }
+    }
+
+    fn discover(&self) -> PyResult<PyGraph> {
+        let inner = self.inner.discover().map_err(core_err_to_py)?;
+        Ok(PyGraph { inner })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("TerraformDiscoverer(root_dir={:?})", self.inner.root_dir)
+    }
+}
+
+// ---------------------------------------------------------------------
 // Module
 // ---------------------------------------------------------------------
 
@@ -775,6 +820,8 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBlastRadiusAnalyzer>()?;
     m.add_class::<PyCriticalityScorer>()?;
     m.add_class::<PySimulator>()?;
+
+    m.add_class::<PyTerraformDiscoverer>()?;
 
     Ok(())
 }

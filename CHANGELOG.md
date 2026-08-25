@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-26
+
+### Added
+
+- **Real Terraform dependency discovery.** `TerraformDiscoverer` now parses
+  `.tf` files with a real HCL2 parser (`hcl-rs`) instead of the previous
+  regex-based extraction (limited to 3 hardcoded AWS resource types, and
+  fooled by multi-line blocks, nested blocks, or comments containing
+  lookalike declarations). Any `resource "type" "name" { ... }` block is
+  discovered now, not just RDS/ElastiCache/ECS. Dependency *edges* are the
+  bigger fix: they previously came from a hardcoded example dependency
+  list (`api_gateway -> auth_service -> production`, etc.) that had
+  nothing to do with the actual `.tf` content being scanned -- edges are
+  now derived from real resource references found in each resource's own
+  attribute values, both bare traversals
+  (`aws_db_instance.production.endpoint`) and interpolated strings
+  (`"${aws_db_instance.production.endpoint}"`).
+- **`TerraformDiscoverer` is now reachable from Python at all.** The real
+  Rust implementation existed before this release but was never exposed
+  via pyo3 -- `pyblastradius.TerraformDiscoverer` (used by `cli.py`,
+  `config.py`, `server.py`) resolved to a pure-Python placeholder in
+  `pyblastradius/discovery.py` that walked matching files and discarded
+  their contents entirely (`# For now, just create mock nodes` / `pass`),
+  always returning an empty graph regardless of what `scan`'s
+  `terraform://` source pointed at. `pyblastradius/__init__.py` now
+  imports the real `_core` binding instead; the fake class has been
+  removed from `discovery.py`.
+- **`benches/large_graph.rs`**: real `criterion` benchmarks (graph
+  construction, `BlastRadiusAnalyzer::analyze`,
+  `CriticalityScorer::score_all`) on layered graphs up to 1,000 nodes with
+  realistic fan-out topology. `criterion`/`[profile.bench]` were declared
+  in `Cargo.toml` with a `// Benchmarks (add later)` comment, but no
+  `benches/` directory or `[[bench]]` target existed before this.
+
 ## [0.2.1] - 2026-08-23
 
 ### Fixed

@@ -16,7 +16,7 @@ Quick start:
     print(f"Blast radius score: {result.blast_radius_score:.1f}/100")
 """
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 __author__ = "Georgi Mammen Mullassery"
 __email__ = "mullassery@gmail.com"
 __license__ = "Proprietary License — Free to use with explicit attribution"
@@ -47,6 +47,12 @@ try:
         BlastRadiusAnalyzer,
         CriticalityScorer,
         Simulator,
+        # Real Terraform discovery (hcl-rs parsing + reference-based
+        # dependency detection - see src/discovery/terraform.rs). Import
+        # this instead of pyblastradius.discovery's TerraformDiscoverer,
+        # which was a pure-Python placeholder that discarded every .tf
+        # file's contents and always returned an empty graph.
+        TerraformDiscoverer,
     )
 except ImportError:
     # Fallback if Rust bindings not available (development mode)
@@ -63,11 +69,12 @@ except ImportError:
     BlastRadiusAnalyzer = None
     CriticalityScorer = None
     Simulator = None
+    TerraformDiscoverer = None
 
-# Python-only exports
+# Python-only exports (Kubernetes/Airflow/Otel discovery has no real
+# implementation yet - see README "Not yet implemented")
 from pyblastradius.discovery import (
     KubernetesDiscoverer,
-    TerraformDiscoverer,
     AirflowDiscoverer,
     OtelDiscoverer,
 )

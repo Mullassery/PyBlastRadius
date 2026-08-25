@@ -1,6 +1,6 @@
 [package]
 name = "pyblastradius"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.70"
 description = "Operational Blast Radius Intelligence Platform - Predict cascading failures and quantify business impact"
@@ -41,6 +41,10 @@ regex = "1.10"
 lazy_static = "1.4"
 xml-rs = "0.8"
 toml = "0.8"
+# Real HCL2 parser for Terraform resource discovery (replaces the previous
+# regex-based extraction, which could not correctly handle multi-line
+# blocks, nested blocks, or comments containing lookalike text).
+hcl-rs = "0.18"
 
 # Logging & diagnostics
 tracing = "0.1"
@@ -98,7 +102,9 @@ strip = true
 opt-level = 3
 lto = true
 
-# Benchmarks (add later)
+[[bench]]
+name = "large_graph"
+harness = false
 
 [features]
 default = ["http-discovery", "otlp-traces"]

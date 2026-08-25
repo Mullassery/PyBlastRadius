@@ -70,31 +70,12 @@ class KubernetesDiscoverer(Discoverer):
         return graph
 
 
-class TerraformDiscoverer(Discoverer):
-    """Discover dependencies from Terraform"""
-
-    def __init__(self, path: str = ".", backend: str = "local"):
-        self.path = Path(path)
-        self.backend = backend
-
-    def discover(self) -> Graph:
-        """Discover from Terraform files"""
-        graph = Graph()
-
-        if not self.path.exists():
-            raise ValueError(f"Path not found: {self.path}")
-
-        # Find .tf files and parse
-        for tf_file in self.path.glob("**/*.tf"):
-            try:
-                with open(tf_file) as f:
-                    # Parse HCL and extract resources
-                    # For now, just create mock nodes
-                    pass
-            except Exception:
-                pass
-
-        return graph
+# TerraformDiscoverer used to live here as a pure-Python placeholder that
+# walked *.tf files and discarded their contents entirely (always returning
+# an empty graph). It's now `pyblastradius.TerraformDiscoverer`, backed by
+# the real Rust hcl-rs-based parser (see src/discovery/terraform.rs /
+# src/python.rs's PyTerraformDiscoverer) -- import it from the top-level
+# `pyblastradius` package, not from this module.
 
 
 class AirflowDiscoverer(Discoverer):
@@ -132,7 +113,6 @@ class OtelDiscoverer(Discoverer):
 __all__ = [
     "Discoverer",
     "KubernetesDiscoverer",
-    "TerraformDiscoverer",
     "AirflowDiscoverer",
     "OtelDiscoverer",
 ]
