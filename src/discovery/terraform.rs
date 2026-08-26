@@ -47,9 +47,12 @@ impl TerraformDiscoverer {
         let resources = self.collect_resources()?;
 
         for resource in &resources {
-            let node = Node::new(resource_short_name(&resource.address), resource.node_type.clone())
-                .with_criticality(resource.criticality)
-                .add_discovered_via(resource.discovered_via);
+            let node = Node::new(
+                resource_short_name(&resource.address),
+                resource.node_type.clone(),
+            )
+            .with_criticality(resource.criticality)
+            .add_discovered_via(resource.discovered_via);
             let node_id = graph.add_node(node)?;
             node_map.insert(resource.address.clone(), node_id);
         }
@@ -159,7 +162,10 @@ fn classify_resource_type(resource_type: &str) -> (NodeType, f32, &'static str) 
         (NodeType::Database, 0.95, "terraform-database")
     } else if t.contains("elasticache") || t.contains("redis") || t.contains("memcache") {
         (NodeType::Cache, 0.8, "terraform-cache")
-    } else if t.contains("sqs") || t.contains("sns") || t.contains("kinesis") || t.contains("mq_broker")
+    } else if t.contains("sqs")
+        || t.contains("sns")
+        || t.contains("kinesis")
+        || t.contains("mq_broker")
     {
         (NodeType::Queue, 0.7, "terraform-queue")
     } else if t.contains("s3_bucket") || t.contains("_table") {
@@ -240,10 +246,12 @@ fn text_references_address(text: &str, address: &str) -> bool {
     while let Some(rel_idx) = text[search_start..].find(address) {
         let idx = search_start + rel_idx;
         let before_ok = idx == 0
-            || !text.as_bytes()[idx - 1].is_ascii_alphanumeric() && text.as_bytes()[idx - 1] != b'_';
+            || !text.as_bytes()[idx - 1].is_ascii_alphanumeric()
+                && text.as_bytes()[idx - 1] != b'_';
         let after_idx = idx + address.len();
         let after_ok = after_idx >= text.len()
-            || !(text.as_bytes()[after_idx].is_ascii_alphanumeric() || text.as_bytes()[after_idx] == b'_');
+            || !(text.as_bytes()[after_idx].is_ascii_alphanumeric()
+                || text.as_bytes()[after_idx] == b'_');
         if before_ok && after_ok {
             return true;
         }
@@ -382,7 +390,10 @@ resource "aws_ecs_service" "auth_service" {
         // not also match "production" as a substring false positive.
         assert_eq!(graph.edge_count(), 1);
         let auth = graph.nodes().find(|n| n.name == "auth_service").unwrap();
-        let replica = graph.nodes().find(|n| n.name == "production_replica").unwrap();
+        let replica = graph
+            .nodes()
+            .find(|n| n.name == "production_replica")
+            .unwrap();
         let production = graph.nodes().find(|n| n.name == "production").unwrap();
         assert!(graph.has_path(&auth.id, &replica.id).unwrap());
         assert!(!graph.has_path(&auth.id, &production.id).unwrap());

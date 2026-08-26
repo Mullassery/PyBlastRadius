@@ -81,9 +81,13 @@ fn bench_blast_radius_analysis(c: &mut Criterion) {
         // leaf node would make this benchmark measure almost nothing.
         let source = graph.nodes().next().unwrap().id;
 
-        group.bench_with_input(BenchmarkId::from_parameter(node_count), &source, |b, &source| {
-            b.iter(|| BlastRadiusAnalyzer::analyze(&graph, source).unwrap());
-        });
+        group.bench_with_input(
+            BenchmarkId::from_parameter(node_count),
+            &source,
+            |b, &source| {
+                b.iter(|| BlastRadiusAnalyzer::analyze(&graph, source).unwrap());
+            },
+        );
     }
     group.finish();
 }
@@ -94,9 +98,13 @@ fn bench_criticality_scoring(c: &mut Criterion) {
         let graph = build_layered_graph(layers, fan_out, 3);
         let node_count = graph.node_count();
 
-        group.bench_with_input(BenchmarkId::from_parameter(node_count), &graph, |b, graph| {
-            b.iter(|| CriticalityScorer::score_all(graph).unwrap());
-        });
+        group.bench_with_input(
+            BenchmarkId::from_parameter(node_count),
+            &graph,
+            |b, graph| {
+                b.iter(|| CriticalityScorer::score_all(graph).unwrap());
+            },
+        );
     }
     group.finish();
 }
