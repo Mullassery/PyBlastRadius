@@ -363,9 +363,7 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 
 ## License
 
-This project is licensed under a Proprietary License. See [LICENSE](LICENSE) for details.
-
-**Attribution Required**: Any use of this software must include attribution: "Powered by PyBlastRadius (https://github.com/Mullassery/PyBlastRadius)"
+This project is licensed under the [Apache License 2.0](LICENSE).
 
 ## Getting Help
 
