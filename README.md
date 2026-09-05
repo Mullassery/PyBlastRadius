@@ -308,7 +308,8 @@ run) rather than a rigorous end-to-end benchmark.
 | Phase 5 | Examples & Documentation | Complete | Working examples, configs |
 | Phase 6 | REST API Server | Complete | FastAPI endpoints + OpenAPI, real API-key auth, explicit CORS allowlist |
 | v0.2.0 | Working Rust-Python bindings | Shipped | `pyblastradius._core` extension module, real end-to-end analysis, first-ever working `import pyblastradius`; discovery engines still not implemented (see Platform Support) |
-| v1.0.0 | Enterprise Edition | Planned | Q1 2027 |
+| v0.3.0 | Real Terraform discovery | Shipped | `TerraformDiscoverer` parses real `.tf` files via `hcl-rs` and derives real dependency edges (see Features); other discoverers still stubs |
+| v1.0.0 | "Enterprise Edition" | Not started | No committed date — see Roadmap below for the concrete gaps this would require closing first |
 
 ## Known Issues
 
@@ -388,23 +389,43 @@ If you use PyBlastRadius in your research or production systems, please cite:
 
 ## Roadmap
 
-### Near-term (Q4 2026)
-- [ ] v0.1 public MVP release
-- [ ] Beta customer feedback program
-- [ ] Kubernetes Operator for continuous discovery
-- [ ] Helm chart for self-hosted deployment
+Earlier versions of this section described a Q4 2026 "v0.1 public MVP
+release" and a Q1 2027 "v1.0 enterprise release" — both stale: v0.1 is
+long past (the repo is at v0.3.0 with real Rust-backed analysis and real
+Terraform discovery already shipped, per Project Status above), and no
+enterprise release is scheduled. This rewrite replaces calendar-committed
+phases with the concrete gaps that are actually next, grounded in the
+Known Issues / Platform Support sections above.
 
-### Medium-term (Q1 2027)
-- [ ] v1.0 enterprise release
-- [ ] ML-based failure prediction
-- [ ] Neo4j backend for 100K+ node graphs
-- [ ] GraphQL Federation for multi-service deployments
+### Near-term (no committed dates — concrete, code-grounded)
+- [ ] A second real discovery engine beyond Terraform. Kubernetes is the
+      likely next candidate since it can follow the same pattern that made
+      `TerraformDiscoverer` real — parse static manifests from a given
+      path/context rather than requiring a live cluster connection.
+- [ ] Resolve `HiddenDependencyDetector`'s two remaining MVP stubs
+      (`detect_from_query_logs`, `detect_from_config`) — either implement
+      them for real or remove them from the public surface so the class
+      doesn't imply four working detection methods when two are real.
+- [ ] Wire the already-correct chat/incident-management webhook payloads
+      in `src/api/integrations.rs` to actually send HTTP (currently
+      commented out) and expose that module to Python — right now it's
+      not reachable from `pyblastradius` at all.
 
-### Long-term (2027+)
-- [ ] Multi-region cascade analysis
-- [ ] Autonomous remediation recommendations
-- [ ] Industry-specific impact templates
-- [ ] GDPR/data-residency support
+### Medium-term (dependent on the near-term items above, not scheduled)
+- [ ] `AnomalyDetector` — currently always returns empty results; needs a
+      real trace/metrics data source wired in, the same underlying gap as
+      OpenTelemetry discovery.
+- [ ] A served GraphQL endpoint — `src/api/graphql.rs` has a query-string
+      builder but nothing executes it today; decide whether to build a
+      server around it or drop it rather than leave it half-built.
+- [ ] Airflow and OpenTelemetry discovery — same static-parsing-vs-live-
+      connection tradeoff as Kubernetes above.
+
+### Directional ideas (not scheduled, not committed to)
+Multi-region cascade analysis, autonomous remediation recommendations,
+industry-specific impact templates, and GDPR/data-residency support are
+plausible future directions but have no code, design doc, or timeline
+behind them yet — listed here only so they aren't lost, not as promises.
 
 ## Related Projects
 
