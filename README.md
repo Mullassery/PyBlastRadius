@@ -2,7 +2,7 @@
 
 ![PyPI](https://img.shields.io/pypi/v/pyblastradius)
 [![CI](https://github.com/Mullassery/PyBlastRadius/actions/workflows/ci.yml/badge.svg)](https://github.com/Mullassery/PyBlastRadius/actions/workflows/ci.yml)
-![License](https://img.shields.io/badge/license-Proprietary-blue)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
 ![Rust](https://img.shields.io/badge/rust-1.70+-orange)
 
