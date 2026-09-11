@@ -340,14 +340,17 @@ that predecessor also has other outgoing edges — branching topologies are now 
 correctly. Both fixes are covered by dedicated branching-topology regression tests in
 `src/analysis/criticality.rs` and `tests/test_analysis.py`.
 
-As of this writing, GitHub Actions CI (`ci.yml`) is still red on `main`, but only because of an
-unrelated, pre-existing failure in Rust-internal code that isn't exposed to Python or claimed
-anywhere in this README: `HiddenDependencyDetector::detect` and the data-quality
-column-lineage impact analysis (`src/integrations/data_quality.rs`) both return empty results
-where their own unit tests expect non-empty ones — the same underlying gap as the
-`HiddenDependencyDetector` bullet above. Check the
+**Fixed as of this pass**: CI's `Clippy` job (`cargo clippy -- -D warnings`) had been failing
+on 14 `doc_lazy_continuation` errors — not in Rust code, but in this README itself (embedded
+as the crate's top-level rustdoc via `include_str!`): the Roadmap section's `- [ ]` checklist
+items had 6-space-indented continuation lines, which rustdoc's markdown parser treats as
+overindented relative to the `- ` marker (2 chars) rather than the visual `[ ] ` width (6
+chars). Re-indented to 2 spaces; verified with the exact CI command (`cargo clippy --
+-D warnings`), clean. The `Format`/`Coverage`/`Build`/`Test` jobs were already green — this
+was the only failing job, not the Rust-internal test-expectation issue an earlier revision of
+this note described (that issue is not currently reproducing; if it resurfaces, check the
 [Actions tab](https://github.com/Mullassery/PyBlastRadius/actions) for current status rather
-than trusting the badge at the top of this file in isolation.
+than trusting either this note or the badge at the top of this file in isolation).
 
 ## Contributing
 
@@ -399,27 +402,27 @@ Known Issues / Platform Support sections above.
 
 ### Near-term (no committed dates — concrete, code-grounded)
 - [ ] A second real discovery engine beyond Terraform. Kubernetes is the
-      likely next candidate since it can follow the same pattern that made
-      `TerraformDiscoverer` real — parse static manifests from a given
-      path/context rather than requiring a live cluster connection.
+  likely next candidate since it can follow the same pattern that made
+  `TerraformDiscoverer` real — parse static manifests from a given
+  path/context rather than requiring a live cluster connection.
 - [ ] Resolve `HiddenDependencyDetector`'s two remaining MVP stubs
-      (`detect_from_query_logs`, `detect_from_config`) — either implement
-      them for real or remove them from the public surface so the class
-      doesn't imply four working detection methods when two are real.
+  (`detect_from_query_logs`, `detect_from_config`) — either implement
+  them for real or remove them from the public surface so the class
+  doesn't imply four working detection methods when two are real.
 - [ ] Wire the already-correct chat/incident-management webhook payloads
-      in `src/api/integrations.rs` to actually send HTTP (currently
-      commented out) and expose that module to Python — right now it's
-      not reachable from `pyblastradius` at all.
+  in `src/api/integrations.rs` to actually send HTTP (currently
+  commented out) and expose that module to Python — right now it's
+  not reachable from `pyblastradius` at all.
 
 ### Medium-term (dependent on the near-term items above, not scheduled)
 - [ ] `AnomalyDetector` — currently always returns empty results; needs a
-      real trace/metrics data source wired in, the same underlying gap as
-      OpenTelemetry discovery.
+  real trace/metrics data source wired in, the same underlying gap as
+  OpenTelemetry discovery.
 - [ ] A served GraphQL endpoint — `src/api/graphql.rs` has a query-string
-      builder but nothing executes it today; decide whether to build a
-      server around it or drop it rather than leave it half-built.
+  builder but nothing executes it today; decide whether to build a
+  server around it or drop it rather than leave it half-built.
 - [ ] Airflow and OpenTelemetry discovery — same static-parsing-vs-live-
-      connection tradeoff as Kubernetes above.
+  connection tradeoff as Kubernetes above.
 
 ### Directional ideas (not scheduled, not committed to)
 Multi-region cascade analysis, autonomous remediation recommendations,
