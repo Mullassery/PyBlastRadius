@@ -182,9 +182,16 @@ data today (see Features above for the exact status of each piece).
 
 ## Documentation
 
-- **[Quick Start](docs/QUICK_START.md)** — 5-minute tutorial with examples
-- **[Architecture](docs/ARCHITECTURE.md)** — System design, algorithms, performance
+- **Quick Start** — see the [Quick Start](#quick-start) section above; it's the
+  accurate, current one (the old `docs/QUICK_START.md` described a v0.1 design
+  that was never built this way and has been archived — see
+  [`docs/archive/README.md`](docs/archive/README.md))
+- **Architecture** — see the [Architecture](#architecture) section above (the
+  old `docs/ARCHITECTURE.md` described a Rust-only CLI binary that no longer
+  exists; also archived)
 - **[Contributing](CONTRIBUTING.md)** — Development setup and guidelines
+- **[ROADMAP_HONEST.md](ROADMAP_HONEST.md)** — concrete, bucketed status of
+  what's tested, untested, broken, and not built
 
 ## Why PyBlastRadius?
 
@@ -315,11 +322,17 @@ run) rather than a rigorous end-to-end benchmark.
 
 No issues are currently open in the GitHub tracker. The gaps below are the ones found by
 reading the source directly; the Features, Platform Support, API Examples, and Integrations
-sections above give the full detail on each:
+sections above give the full detail on each. **See [ROADMAP_HONEST.md](ROADMAP_HONEST.md)
+for the complete, bucketed list (built-and-tested / built-not-tested / CI-broken / not-built)
+with file:line specifics** — this section is a summary, not the full picture:
 
 - Dependency discovery (`pyblastradius scan` and the `*Discoverer` classes) always returns an
   empty graph for Kubernetes/Airflow/OTLP sources — no parsing or live connection is implemented
   yet for those. Terraform discovery is real (see Features/Platform Support above).
+  **Notably, real, tested Rust-level parsing for Kubernetes and OTLP already exists**
+  (`src/discovery/kubernetes.rs`, `src/discovery/otlp.rs`, with passing `cargo test` coverage)
+  but is not exposed via pyo3 bindings at all — the Python-facing classes are separate,
+  disconnected stubs. This is the same state Terraform was in before v0.3.0 wired it up.
 - `HiddenDependencyDetector` is a mix: `detect_from_trace_gaps` (fan-out + async-keyword
   heuristic) and `detect_semantic_coupling` (name-similarity heuristic) are real logic, not
   stubs — but two of its four methods, `detect_from_query_logs` and `detect_from_config`, are
@@ -331,6 +344,15 @@ sections above give the full detail on each:
   GraphQL endpoint.
 - The chat/incident-management integration structs in the Rust crate build correct payloads
   but never send them, and are not exposed to Python.
+- **The repo's own composite GitHub Action (`action.yml`) is broken, not just untested** —
+  its embedded script calls three nonexistent/incorrect Python APIs
+  (`BlastRadiusAnalyzer(graph)` as a constructor, `graph.services()`, `Graph.merge([...])` as
+  a static method) and uses GitHub's deprecated `::set-output` syntax. It has never worked as
+  shipped. `.github/workflows/example-blast-radius.yml` also references a possibly-different
+  repo (`Mullassery/pyblastradius-action@v1`) that could not be verified from this environment.
+  See ROADMAP_HONEST.md.
+- `python/pyblastradius/config.py` (the `blastradius.yml` config-file loader — 257 lines) has
+  zero automated test coverage.
 
 `CriticalityScorer`'s two previously-documented correctness bugs are now fixed:
 `criticality_score` no longer divides by 100 twice (it returns the documented 0–100 scale),
@@ -340,7 +362,24 @@ that predecessor also has other outgoing edges — branching topologies are now 
 correctly. Both fixes are covered by dedicated branching-topology regression tests in
 `src/analysis/criticality.rs` and `tests/test_analysis.py`.
 
-**Fixed as of this pass**: CI's `Clippy` job (`cargo clippy -- -D warnings`) had been failing
+**Fixed in the 2026-09-19/20 OSS-standardization pass**: `pyproject.toml`'s `[tool.maturin]`
+was missing `include = ["LICENSE"]`, so `maturin sdist` omitted the license file — a recurring
+bug across this org's Rust/PyO3 repos that causes PyPI to reject uploads; fixed and verified by
+inspecting the built sdist tarball. `Cargo.lock` was gitignored despite this crate shipping a
+Python extension module (an application, not a pure library) — this made builds
+non-reproducible and silently broke CI's cargo cache key (`hashFiles('**/Cargo.lock')` against
+a file that didn't exist in a fresh checkout); now committed. CI's Clippy job used plain
+`cargo clippy -- -D warnings`, which skips `#[cfg(test)]` code — 9 real clippy errors (unused
+imports, `len_zero`) had been sitting undetected in test modules as a result; fixed the errors
+and changed CI to `cargo clippy --all-targets -- -D warnings`. `pyproject.toml`'s `dev` extra
+was missing `httpx`, which `fastapi.testclient.TestClient` needs transitively — without it,
+4 of 35 pytest tests in `tests/test_server.py` fail with an import error, not a real bug in the
+code under test; added. Added a `cargo audit` job to CI (could not run locally — this sandbox
+blocks outbound access to github.com, which is where `cargo-audit` fetches its advisory
+database from — so its actual result is unverified pending the next CI run). See
+[ROADMAP_HONEST.md](ROADMAP_HONEST.md) for the full list including issues found but not fixed.
+
+**Fixed as of an earlier pass**: CI's `Clippy` job (`cargo clippy -- -D warnings`) had been failing
 on 14 `doc_lazy_continuation` errors — not in Rust code, but in this README itself (embedded
 as the crate's top-level rustdoc via `include_str!`): the Roadmap section's `- [ ]` checklist
 items had 6-space-indented continuation lines, which rustdoc's markdown parser treats as
@@ -371,10 +410,11 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 ## Getting Help
 
-- **Documentation**: [docs/](docs/)
-- **Quick Start**: [docs/QUICK_START.md](docs/QUICK_START.md)
-- **Architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Documentation**: [docs/](docs/) (see [Quick Start](#quick-start) and
+  [Architecture](#architecture) above for the current, accurate versions)
+- **Roadmap / honest status**: [ROADMAP_HONEST.md](ROADMAP_HONEST.md)
 - **Issues**: [GitHub Issues](https://github.com/Mullassery/PyBlastRadius/issues)
+- **Security**: [SECURITY.md](SECURITY.md)
 - **Email**: mullassery@gmail.com
 
 ## Citation
@@ -401,10 +441,15 @@ phases with the concrete gaps that are actually next, grounded in the
 Known Issues / Platform Support sections above.
 
 ### Near-term (no committed dates — concrete, code-grounded)
-- [ ] A second real discovery engine beyond Terraform. Kubernetes is the
-  likely next candidate since it can follow the same pattern that made
-  `TerraformDiscoverer` real — parse static manifests from a given
-  path/context rather than requiring a live cluster connection.
+- [ ] A second real discovery engine beyond Terraform. Kubernetes and OTLP
+  are both further along than previously documented here: real, tested
+  parsing already exists at the Rust level (`src/discovery/kubernetes.rs`,
+  `src/discovery/otlp.rs`), it's just never been exposed via pyo3 or wired
+  into the Python `KubernetesDiscoverer`/`OtelDiscoverer` classes, which
+  are still separate always-empty stubs (see Known Issues /
+  ROADMAP_HONEST.md). Wiring one of these up the way `TerraformDiscoverer`
+  was in v0.3.0 is likely less work than building a new discoverer from
+  scratch.
 - [ ] Resolve `HiddenDependencyDetector`'s two remaining MVP stubs
   (`detect_from_query_logs`, `detect_from_config`) — either implement
   them for real or remove them from the public surface so the class
@@ -421,8 +466,9 @@ Known Issues / Platform Support sections above.
 - [ ] A served GraphQL endpoint — `src/api/graphql.rs` has a query-string
   builder but nothing executes it today; decide whether to build a
   server around it or drop it rather than leave it half-built.
-- [ ] Airflow and OpenTelemetry discovery — same static-parsing-vs-live-
-  connection tradeoff as Kubernetes above.
+- [ ] Airflow discovery — no real Rust-level parsing exists for this one
+  yet (unlike Kubernetes/OTLP above), so this one genuinely needs building
+  from scratch.
 
 ### Directional ideas (not scheduled, not committed to)
 Multi-region cascade analysis, autonomous remediation recommendations,

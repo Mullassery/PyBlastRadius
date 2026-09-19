@@ -65,14 +65,14 @@ mod tests {
             .expect("api-server node must exist in the sample graph");
 
         let result = BlastRadiusAnalyzer::analyze(&graph, start).unwrap();
-        assert!(result.directly_impacted.len() > 0);
+        assert!(!result.directly_impacted.is_empty());
     }
 
     #[test]
     fn test_criticality_scoring() {
         let graph = create_sample_graph();
         let scores = CriticalityScorer::score_all(&graph).unwrap();
-        assert!(scores.len() > 0);
+        assert!(!scores.is_empty());
 
         // DB should have highest criticality
         let db_node = graph.nodes().find(|n| n.name == "postgresql").unwrap();

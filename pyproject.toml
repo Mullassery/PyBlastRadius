@@ -53,6 +53,12 @@ dev = [
     "isort>=5.0",
     "flake8>=6.0",
     "mypy>=1.0",
+    # Required transitively by starlette.testclient.TestClient, which
+    # tests/test_server.py uses via fastapi.testclient -- without this,
+    # `pip install -e .[dev]` followed by `pytest` fails 4 tests in
+    # tests/test_server.py with "requires the httpx2 package" (verified
+    # 2026-09-19).
+    "httpx>=0.24",
 ]
 docs = [
     "sphinx>=6.0",
@@ -76,13 +82,17 @@ all = [
 
 [project.urls]
 Repository = "https://github.com/Mullassery/PyBlastRadius"
-Documentation = "https://github.com/Mullassery/PyBlastRadius/blob/main/docs/QUICK_START.md"
+Documentation = "https://github.com/Mullassery/PyBlastRadius#readme"
 Issues = "https://github.com/Mullassery/PyBlastRadius/issues"
 Homepage = "https://github.com/Mullassery/PyBlastRadius"
 
 [tool.maturin]
 python-source = "python"
 module-name = "pyblastradius._core"
+# Without this, `maturin sdist` omits LICENSE from the source distribution,
+# and PyPI rejects the upload (recurring issue across this org's Rust/PyO3
+# repos -- see e.g. the maturin sdist LICENSE bug in other Mullassery repos).
+include = ["LICENSE"]
 
 [tool.black]
 line-length = 100

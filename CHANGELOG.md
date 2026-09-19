@@ -83,72 +83,50 @@ No public API changes.
 - Helm chart for self-hosted deployment
 - Advanced hidden dependency detection (query logs, configuration mining)
 
-## [0.1.0] - 2026-10-15 (Planned)
+## [0.2.0] - 2026-08-05
+
+Real git tag (`v0.2.0`), dated from `git log`. No entry existed for this
+release before this pass; added from the verified commit history and the
+Project Status table in README.md rather than reconstructed from memory.
 
 ### Added
-- **Core Graph Engine**
-  - Unified dependency graph with petgraph
-  - Support for 11 node types (Service, Database, Pipeline, Topic, VectorDB, Agent, Cache, Queue, etc.)
-  - 9 edge types (Calls, Queries, Produces, Consumes, Feeds, DependsOn, Transforms, ExportsTo, Retrieves)
-  - Graph traversal algorithms (BFS, DFS, topological sort)
-  - Graph serialization (JSON, GraphML, Dot/Graphviz)
+- First working `pyblastradius._core` PyO3 extension module — end-to-end
+  `import pyblastradius` against real compiled Rust code, not a pure-Python
+  placeholder.
+- Real end-to-end analysis via the extension: `Graph`/`Node`/`Edge`,
+  `BlastRadiusAnalyzer`, `CriticalityScorer`, `Simulator`.
 
-- **Discovery Engines**
-  - Kubernetes manifest parser (Services, Deployments, StatefulSets, NetworkPolicies)
-  - Terraform HCL parser (AWS, Azure, GCP resources)
-  - Airflow DAG parser (models, tasks, dependencies)
-  - OpenTelemetry trace consumer (runtime dependencies from traces)
+### Known limitations as of this release
+Discovery engines (Kubernetes, Airflow, OTel) were not implemented yet —
+see Platform Support in README.md for current status of each.
 
-- **Analysis Algorithms**
-  - Blast radius analysis (BFS-based impact categorization)
-  - Criticality scoring (weighted formula with business exposure)
-  - Failure simulator (cascade propagation, recovery time estimation)
-  - Hidden dependency detection (trace mining, semantic analysis)
-  - Anomaly detection (latency spikes, error rates, resource exhaustion)
+## [0.1.0] - 2026-08-05
 
-- **CLI Interface**
-  - `scan` - Discover dependencies from infrastructure
-  - `analyze` - Blast radius analysis for a service
-  - `criticality` - Rank systems by risk
-  - `graph` - Generate visualization (HTML, Dot, GraphML)
-  - `simulate` - Failure cascade scenarios
-  - `analyze-deployment` - Pre-deployment risk assessment
-  - `status` - System metrics
+Real git tag (`v0.1.0`), dated from `git log`.
 
-- **GraphQL API**
-  - 15+ types with full schema
-  - Queries: blastRadius, criticality, anomalies, hiddenDependencies, metrics
-  - Mutations: updateNode, analyzeService, simulateFailure, addDependency
+**This entry was originally written before implementation started and
+described intended v1.0 scope, not what had actually shipped** — it listed
+a GraphQL API, Slack/PagerDuty integrations, and full Kubernetes/Airflow/
+OpenTelemetry discovery as "Added" in this release. None of that was true
+at the time and, per README.md's Known Issues (verified 2026-09-19), most
+of it (Kubernetes/Airflow/OTel discovery, the GraphQL endpoint, and sending
+actual Slack/PagerDuty webhooks) is still not implemented today, several
+releases later. Corrected below to only what the actual `v0.1.0` git tag's
+codebase supports; see README.md for the authoritative current-state
+breakdown of every feature.
 
-- **Third-Party Integrations**
-  - Slack Bot (blast radius alerts, anomaly notifications)
-  - PagerDuty (incident creation/resolution)
-
-- **Data Quality & Lineage**
-  - StatGuardian integration (quality rules, cascade impact)
-  - dbt manifest parser (column-level lineage, tests)
-  - Column lineage tracker (data quality cascade analysis)
-
-- **Documentation**
-  - Quick start guide (5-minute tutorial)
-  - Architecture guide (algorithms, performance)
-  - Contributing guide (dev setup, CI/CD)
-  - Example configurations (Kubernetes, Terraform, Airflow)
-  - Business impact templates
-
-- **Testing & Quality**
-  - 150+ unit and integration tests
-  - CI/CD pipeline (GitHub Actions)
-  - Code coverage reporting
-  - Multi-platform builds (Linux, macOS, Windows)
-
-### Technical Details
-- Written in Rust with Python bindings (PyO3)
-- Zero-copy graph operations via petgraph
-- Async-ready with tokio
-- Support for 10,000+ node graphs in-memory
-- <100ms query latency for typical operations
-- Full integration test coverage
+### Added
+- Initial project scaffold: Rust workspace, `petgraph`-based graph model
+  (node/edge types, properties), graph traversal (BFS/DFS/topological
+  sort), JSON/GraphML/Dot serialization.
+- Early-stage discovery, analysis, and integration code for Kubernetes,
+  Terraform, Airflow, OTel, GraphQL, Slack/PagerDuty, and dbt/StatGuardian
+  — present in the codebase from this point on, but not wired up to real
+  parsing/live data/Python bindings until later releases (Terraform in
+  v0.3.0, the Python extension module itself in v0.2.0). Treat this as
+  "code exists" not "feature works" — see README.md Known Issues for what
+  is real today.
+- CI/CD scaffold (GitHub Actions), example configs, initial docs.
 
 ---
 

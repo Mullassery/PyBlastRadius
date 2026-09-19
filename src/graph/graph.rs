@@ -251,7 +251,7 @@ impl Default for Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::node::{Node, NodeType};
+    use crate::graph::node::Node;
 
     #[test]
     fn test_graph_operations() {

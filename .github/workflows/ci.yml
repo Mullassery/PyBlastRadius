@@ -56,7 +56,12 @@ jobs:
           components: clippy
 
       - name: Run clippy
-        run: cargo clippy -- -D warnings
+        # --all-targets so this actually lints #[cfg(test)] code too --
+        # plain `cargo clippy` silently skips test targets, which is how 9
+        # real clippy errors (unused imports, len_zero) sat undetected in
+        # this repo's own test code until this pass caught them by running
+        # `cargo clippy --all-targets` locally.
+        run: cargo clippy --all-targets -- -D warnings
 
   fmt:
     name: Format
@@ -91,6 +96,21 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           files: ./cobertura.xml
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        run: cargo audit
 
   build:
     name: Build

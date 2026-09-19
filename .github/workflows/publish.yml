@@ -87,7 +87,7 @@ jobs:
       - name: Flatten dist directory
         run: |
           mkdir -p final_dist
-          find dist -type f -name "*.whl" -o -name "*.tar.gz" | while read file; do
+          find dist -type f \( -name "*.whl" -o -name "*.tar.gz" \) | while read -r file; do
             cp "$file" final_dist/
           done
           ls -la final_dist/
@@ -113,7 +113,7 @@ jobs:
           path: artifacts/
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/**/*.whl
@@ -135,9 +135,9 @@ jobs:
 
             ## Documentation
 
-            - [Quick Start](https://github.com/Mullassery/PyBlastRadius/blob/main/docs/QUICK_START.md)
-            - [Architecture](https://github.com/Mullassery/PyBlastRadius/blob/main/docs/ARCHITECTURE.md)
+            - [README](https://github.com/Mullassery/PyBlastRadius#readme) (Quick Start, Architecture, current status)
             - [Contributing](https://github.com/Mullassery/PyBlastRadius/blob/main/CONTRIBUTING.md)
+            - [Honest roadmap / known gaps](https://github.com/Mullassery/PyBlastRadius/blob/main/ROADMAP_HONEST.md)
 
             ## Support
 

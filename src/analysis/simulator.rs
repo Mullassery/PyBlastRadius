@@ -212,8 +212,8 @@ mod tests {
 
         let result = Simulator::simulate(&graph, api, FailureType::Outage).unwrap();
 
-        assert!(result.cascade_path.len() > 0);
-        assert!(result.affected_services.len() > 0);
+        assert!(!result.cascade_path.is_empty());
+        assert!(!result.affected_services.is_empty());
     }
 
     #[test]

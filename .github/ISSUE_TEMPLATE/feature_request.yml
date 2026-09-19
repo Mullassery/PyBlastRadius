@@ -1,0 +1,38 @@
+name: Feature Request
+description: Suggest something new for PyBlastRadius
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check `ROADMAP_HONEST.md` first — your idea may already be listed
+        as a known gap (e.g. Kubernetes/Airflow discovery, a served GraphQL
+        endpoint, sending the already-built chat/incident-management
+        webhook payloads).
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Brief description of the feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: What problem does this solve for you?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: How should this work, if you have a specific idea?
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered

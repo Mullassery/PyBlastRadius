@@ -259,7 +259,7 @@ mod tests {
 
         let lineage = client.get_column_lineage("orders").await.unwrap();
         assert!(!lineage.is_empty());
-        assert!(lineage[0].affected_metrics.len() > 0);
+        assert!(!lineage[0].affected_metrics.is_empty());
     }
 
     #[tokio::test]

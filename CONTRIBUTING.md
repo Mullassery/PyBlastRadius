@@ -10,7 +10,9 @@ Thank you for your interest in contributing! This document provides guidelines a
 
 - **Rust 1.70+**: Install from [rustup.rs](https://rustup.rs/)
 - **Git**: Version control
-- **Python 3.10+**: For Python bindings and testing (future)
+- **Python 3.10-3.13**: For building/testing the `pyblastradius._core` PyO3
+  extension module and running the pytest suite (PyO3 0.23.5 does not
+  support Python 3.14+ as the build interpreter)
 - **Protobuf compiler**: For OTLP support (`brew install protobuf`)
 
 ### Clone & Build
@@ -156,6 +158,27 @@ cargo test --lib graph::tests
 # Run with coverage
 cargo tarpaulin --out Html
 ```
+
+### Testing the Python Bindings
+
+The Python package (`python/pyblastradius/`) wraps the compiled
+`pyblastradius._core` extension module. To build it and run the pytest
+suite that exercises it:
+
+```bash
+python3.11 -m venv .venv   # any 3.10-3.13 interpreter; PyO3 0.23.5 rejects 3.14+
+source .venv/bin/activate
+pip install maturin
+maturin develop --release          # builds src/ and installs it as pyblastradius
+pip install -e ".[dev,server]"     # test/dev tooling + FastAPI server extras
+pytest tests/ -q
+```
+
+Verified 2026-09-19: this sequence builds cleanly and all 35 tests in
+`tests/` pass. Note `tests/test_server.py` needs `httpx` (pulled in via the
+`dev` extra) because `fastapi.testclient.TestClient` requires it at import
+time -- without it those 4 tests fail with an import error, not a real
+regression in the code under test.
 
 ### Test Fixtures
 
@@ -390,7 +413,7 @@ Other approaches considered
 
 Update version in:
 - `Cargo.toml`
-- `docs/QUICK_START.md`
+- `pyproject.toml`
 - `README.md`
 
 ```bash

@@ -204,7 +204,7 @@ impl TopoSort {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{Edge, EdgeType, Graph, Node, NodeType};
+    use crate::graph::{Edge, EdgeType, Graph, Node};
 
     fn create_test_graph() -> Graph {
         let mut graph = Graph::new();
@@ -228,7 +228,7 @@ mod tests {
         let start = nodes[0];
 
         let result = BfsTraversal::traverse(&graph, start).unwrap();
-        assert!(result.visited.len() >= 1);
+        assert!(!result.visited.is_empty());
     }
 
     #[test]

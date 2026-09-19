@@ -1,0 +1,62 @@
+name: Bug Report
+description: Report something in PyBlastRadius that is broken
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: check README.md's "Known Issues" and
+        `ROADMAP_HONEST.md` — several discovery engines (Kubernetes,
+        Airflow, OpenTelemetry) and integrations are documented as
+        not-yet-implemented, not bugs.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal steps/code to reproduce the issue.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Output / Traceback
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: PyBlastRadius Version
+      placeholder: "e.g. 0.3.0 (pip show pyblastradius)"
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      placeholder: "e.g. 3.11.6"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true

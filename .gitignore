@@ -1,8 +1,11 @@
 # Rust
 /target
 **/*.rs.bk
-Cargo.lock
 *.pdb
+# Cargo.lock is intentionally committed (not ignored): this crate builds a
+# Python extension module + CLI (an application/product, not a pure
+# library), so pinning exact dependency versions makes builds and
+# `cargo audit` reproducible. See ROADMAP_HONEST.md.
 
 # Python
 __pycache__/

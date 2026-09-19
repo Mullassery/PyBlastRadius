@@ -175,7 +175,7 @@ mod tests {
         let result = BlastRadiusAnalyzer::analyze(&graph, api).unwrap();
 
         assert!(result.blast_radius_score > 0.0);
-        assert!(result.directly_impacted.len() > 0);
+        assert!(!result.directly_impacted.is_empty());
     }
 
     #[test]
