@@ -75,6 +75,48 @@ No public API changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`action.yml` (the repo's own composite GitHub Action) was completely
+  non-functional; rewritten against the real Python API.** It called
+  `BlastRadiusAnalyzer(graph)` as a constructor (no `#[new]` exists on
+  `PyBlastRadiusAnalyzer` -- `analyze` is a staticmethod), `graph.services()`
+  (no such method on `Graph`), and `Graph.merge([graph, sub_graph])` as a
+  static call (the real `merge` is an instance method, `graph.merge(other)`,
+  mutating in place). It also used the deprecated `::set-output` command,
+  which GitHub Actions has disabled, so outputs silently never set even
+  before the API bugs. Separately, the top-level `outputs:` block referenced
+  `steps.analyze.outputs.*`, but the step with `id: analyze` was the
+  discovery step -- the step that actually set outputs was `id: pr_comment`
+  -- so outputs would have stayed unset even if every other bug were fixed.
+  Rewritten to call the real API (`BlastRadiusAnalyzer.analyze(graph,
+  node_id, max_depth=...)`, `graph.nodes()` filtered by `NodeType.Service`,
+  instance-method `graph.merge(other)`), write to `$GITHUB_OUTPUT`, and
+  renamed step ids so the output step is actually `id: analyze`. Verified
+  by extracting and running the exact embedded Python against a synthetic
+  Terraform fixture (multiple `aws_ecs_service`/`aws_lambda_function`/
+  `aws_db_instance` resources with cross-references) end-to-end, including
+  the failure-threshold pass/fail branches and the "no sources discovered"
+  and "invalid source URI" edge cases -- no exceptions, real scores/outputs
+  produced.
+- **`.github/workflows/example-blast-radius.yml`** referenced
+  `Mullassery/pyblastradius-action@v1`, a repo that does not exist (verified
+  via authenticated `gh api` -- GraphQL resolution failure, not just a
+  blocked-network false negative). Repointed to
+  `uses: Mullassery/PyBlastRadius@main`, since this repo's own root
+  `action.yml` *is* the composite action and there is no `v1` tag/release
+  yet (`gh api .../tags` shows only `v0.1.0`/`v0.2.0`) to pin to instead.
+- **`CONTRIBUTING.md`** referenced `src/bin/cli.rs` and `cargo run --
+  --version` in two places (Development Setup, "Adding a New Discovery
+  Engine"); both were removed from the crate when the CLI moved to
+  `python/pyblastradius/cli.py` (confirmed `cargo run` fails with "a bin
+  target must be available" -- no `[[bin]]` in `Cargo.toml`). Updated both
+  sections to describe the actual PyO3-binding + Python-CLI wiring path.
+- **`python/pyblastradius/__init__.py`**'s `__license__` still said
+  "Proprietary License" after the repo was relicensed to Apache-2.0
+  (`pyproject.toml`'s `license = "Apache-2.0"` and the root `LICENSE` file
+  already reflected it). Corrected to `"Apache-2.0"`.
+
 ### Planned
 - ML-based failure prediction with anomaly consensus scoring
 - Neo4j backend for 100K+ node graphs

@@ -19,7 +19,7 @@ Quick start:
 __version__ = "0.3.0"
 __author__ = "Georgi Mammen Mullassery"
 __email__ = "mullassery@gmail.com"
-__license__ = "Proprietary License — Free to use with explicit attribution"
+__license__ = "Apache-2.0"
 
 # Core exports - real Rust engine, via the `pyblastradius._core` pyo3
 # extension module (see src/python.rs). BlastRadiusAnalyzer, CriticalityScorer

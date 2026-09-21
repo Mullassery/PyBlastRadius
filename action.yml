@@ -36,22 +36,21 @@ runs:
 
     - name: Install PyBlastRadius
       shell: bash
-      run: pip install pyblastradius click rich pyyaml
+      run: pip install "pyblastradius[cli]"
 
-    - name: Run discovery and analysis
-      id: analyze
+    - name: Run discovery
+      id: discover
       shell: bash
       env:
         DISCOVERY_SOURCES: ${{ inputs.discovery-sources }}
-        MAX_DEPTH: ${{ inputs.max-depth }}
-        FAILURE_THRESHOLD: ${{ inputs.failure-on-score }}
       run: |
-        # Parse sources and run scan
+        # Parse sources and run scan. Mirrors python/pyblastradius/cli.py's
+        # `scan` command: UriParser -> discoverer.discover() -> Graph.merge()
+        # (an instance method that mutates in place and returns None -- it
+        # is not a static/class-level constructor).
         python -c "
-        from pyblastradius.cli import cli, UriParser
+        from pyblastradius.cli import UriParser
         from pyblastradius import Graph
-        import json
-        import sys
         import os
 
         sources = os.environ.get('DISCOVERY_SOURCES', '').strip().split('\n')
@@ -63,47 +62,64 @@ runs:
                 scheme, params = UriParser.parse(source_uri)
                 discoverer = UriParser.create_discoverer(scheme, params)
                 sub_graph = discoverer.discover()
-                graph = Graph.merge([graph, sub_graph])
+                graph.merge(sub_graph)
             except Exception as e:
                 print(f'Warning: Failed to discover from {source_uri}: {e}')
 
-        # Save graph
         with open('blast-radius.json', 'w') as f:
             f.write(graph.to_json())
         print(f'Discovered {graph.node_count()} nodes')
         "
 
     - name: Analyze blast radius
-      id: pr_comment
+      id: analyze
       shell: bash
+      env:
+        MAX_DEPTH: ${{ inputs.max-depth }}
       run: |
+        # BlastRadiusAnalyzer.analyze() is a staticmethod taking
+        # (graph, node_id, max_depth=None) -- it is not constructed via
+        # BlastRadiusAnalyzer(graph). Graph has no services() method; the
+        # real Graph.nodes() returns Node objects with a .node_type, so we
+        # filter for NodeType.Service ourselves. blast_radius_score is on a
+        # 0-100 scale (see cli.py's `analyze` command), so it is divided by
+        # 100 here to match this action's documented 0-1 output range.
         python -c "
-        from pyblastradius import Graph, BlastRadiusAnalyzer
+        from pyblastradius import Graph, BlastRadiusAnalyzer, NodeType
         import json
+        import os
 
         with open('blast-radius.json') as f:
             graph = Graph.from_json(f.read())
 
-        # Analyze each service and find highest score
-        analyzer = BlastRadiusAnalyzer(graph)
-        max_score = 0
+        max_depth = int(os.environ.get('MAX_DEPTH', '5'))
+        services = [n for n in graph.nodes() if n.node_type == NodeType.Service]
+
+        max_score = 0.0
         max_service = None
+        max_result = None
 
-        for service in graph.services():
-            result = analyzer.analyze(service)
-            if result.score > max_score:
-                max_score = result.score
-                max_service = service
+        for node in services:
+            result = BlastRadiusAnalyzer.analyze(graph, node.id, max_depth=max_depth)
+            score = result.blast_radius_score / 100.0
+            if score > max_score:
+                max_score = score
+                max_service = node.name
+                max_result = result
 
-        print(f'::set-output name=score::{max_score:.2f}')
-        print(f'::set-output name=impacted::{len(graph.services()) - 1}')
+        impacted = max_result.total_impacted if max_result is not None else 0
 
-        # Save result
+        # Modern GitHub Actions output syntax; the ::set-output command was
+        # deprecated and disabled -- writes to it are silently dropped.
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write(f'score={max_score:.2f}\n')
+            f.write(f'impacted={impacted}\n')
+
         with open('analysis-result.json', 'w') as f:
             json.dump({
                 'max_score': max_score,
                 'max_service': max_service,
-                'services_count': len(graph.services())
+                'services_count': len(services),
             }, f)
         "
 

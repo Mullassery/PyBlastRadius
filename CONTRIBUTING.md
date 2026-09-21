@@ -26,10 +26,12 @@ cargo build
 
 # Run tests
 cargo test
-
-# Run CLI
-cargo run -- --version
 ```
+
+This crate builds as a library (the `pyblastradius._core` PyO3 extension
+module) with no `[[bin]]` target -- `cargo run` does not work here. The CLI
+is `python/pyblastradius/cli.py` (installed as the `pyblastradius` console
+script); see "Testing the Python Bindings" below to build and run it.
 
 ### IDE Setup
 
@@ -326,25 +328,30 @@ pub mod myservice;
 pub use myservice::MyServiceDiscoverer;
 ```
 
-### 3. Add CLI Support
+### 3. Expose It to Python and Wire Up the CLI
 
-`src/bin/cli.rs`:
+`src/bin/cli.rs` was removed (this crate builds as a library only now --
+see "Clone & Build" above); the user-facing CLI is
+`python/pyblastradius/cli.py`, backed by the `pyblastradius._core` PyO3
+extension (see `src/python.rs` for the binding pattern, e.g.
+`PyTerraformDiscoverer`).
 
-```rust
-#[derive(Parser)]
-struct ScanArgs {
-    #[arg(short, long)]
-    myservice: Option<PathBuf>,
-    // ...
-}
+First, add a `#[pyclass]`/`#[pymethods]` wrapper in `src/python.rs` that
+delegates to `MyServiceDiscoverer`, and register it with
+`m.add_class::<PyMyServiceDiscoverer>()?` in the `_core` `#[pymodule]`
+function. Then wire it into the CLI's URI scheme dispatch in
+`python/pyblastradius/cli.py`'s `UriParser.create_discoverer`:
 
-// In scan command handler:
-if let Some(path) = args.myservice {
-    let discoverer = MyServiceDiscoverer::new(path.to_string_lossy().to_string());
-    let graph = discoverer.discover()?;
-    // Merge into main graph
-}
+```python
+elif scheme == "myservice":
+    return MyServiceDiscoverer(
+        config_path=params.get("path", "."),
+    )
 ```
+
+This makes `pyblastradius scan myservice://path=./config` (and the
+`myservice://` scheme in `action.yml`) work end-to-end, the same way
+`terraform://` is wired to the real `TerraformDiscoverer`.
 
 ### 4. Add Tests
 

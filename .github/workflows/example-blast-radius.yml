@@ -17,7 +17,15 @@ jobs:
 
       - name: Run Blast Radius Analysis
         id: blast
-        uses: Mullassery/pyblastradius-action@v1
+        # `Mullassery/pyblastradius-action` does not exist (verified via
+        # authenticated `gh api repos/Mullassery/pyblastradius-action` ->
+        # 404 GraphQL resolution failure). This repo's own root action.yml
+        # *is* the composite action (see CONTRIBUTING.md / action.yml), so
+        # it's referenced directly here. Pinned to @main rather than a tag
+        # because this repo has no `v1` tag/release yet (only v0.1.0,
+        # v0.2.0 -- verified via `gh api .../tags` and `.../releases`);
+        # repin to a proper version tag once one exists.
+        uses: Mullassery/PyBlastRadius@main
         with:
           discovery-sources: |
             kubernetes://

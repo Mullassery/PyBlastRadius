@@ -53,47 +53,44 @@ relevant).
   `test_slack_integration`, `test_pagerduty_integration`), but the actual
   HTTP send calls are commented out, so "correct payload shape" has never
   been verified against a real Slack/PagerDuty endpoint.
-- **`action.yml`'s composite GitHub Action** — see bucket 3, it is broken,
-  not merely untested.
 
 ## 3. CI errors / broken
 
-- **`action.yml` (the repo's own composite GitHub Action) is non-functional.**
-  Its embedded Python script:
-  - Calls `BlastRadiusAnalyzer(graph)` as a constructor
-    (`action.yml` line ~88) — but `PyBlastRadiusAnalyzer` in `src/python.rs`
-    is a unit struct with no `#[new]`; this raises `TypeError` immediately,
-    before any analysis runs.
-  - Calls `graph.services()` (`action.yml` line ~92) — no such method
-    exists on `PyGraph` (`src/python.rs` only exposes `nodes()`, `edges()`,
-    `node_count()`, etc.).
-  - Calls `Graph.merge([graph, sub_graph])` as if it were a static
-    class-level merge (`action.yml` line ~66) — the real `merge` is an
-    instance method, `graph.merge(other)`, mutating in place and returning
-    `None` (`src/python.rs`, `PyGraph::merge`).
-  - Uses the deprecated `::set-output name=x::` command syntax
-    (`action.yml` lines ~98-99), which GitHub Actions has disabled — even
-    if the API calls above were fixed, outputs would silently not be set.
-  This action has never worked as shipped. **Needs a dedicated follow-up
-  session** to either rewrite it against the real `pyblastradius` Python
-  API or decide it's not worth maintaining and delete it along with
-  `.github/workflows/example-blast-radius.yml`.
-- **`.github/workflows/example-blast-radius.yml` references a different,
-  unverifiable repo**: `uses: Mullassery/pyblastradius-action@v1`. This
-  repo's own root `action.yml` suggests *this* repo is meant to be usable
-  directly as a composite action (`uses: Mullassery/PyBlastRadius@v1`), not
-  via a separately-named `pyblastradius-action` repo. We could not check
-  GitHub (network to github.com is blocked in this sandbox) to confirm
-  whether `Mullassery/pyblastradius-action` exists. Either way, the action
-  it points to is the broken one above, so this workflow does not work
-  today regardless of which repo reference is intended.
-- **`cargo audit` could not be run locally** in this sandbox (outbound
-  network to `github.com` — where `cargo-audit` fetches the RustSec
-  advisory DB from — is blocked here; `crates.io` and PyPI were reachable).
-  A `cargo audit` job was added to `.github/workflows/ci.yml` in this pass
-  so it will run for real on GitHub's runners, but its actual result is
-  unverified as of this writing — check the Actions tab after the next
-  push.
+- ~~`action.yml` (the repo's own composite GitHub Action) is
+  non-functional~~ **Fixed 2026-09-21**: rewritten against the real
+  `pyblastradius` Python API (`BlastRadiusAnalyzer.analyze(graph, node_id,
+  max_depth=...)` staticmethod, `graph.nodes()` filtered by
+  `NodeType.Service` instead of a nonexistent `services()`, instance-method
+  `graph.merge(other)` instead of a static `Graph.merge([...])`), switched
+  `::set-output` to `$GITHUB_OUTPUT`, and fixed a step-id mismatch that
+  meant the top-level `outputs:` block was reading from the wrong step
+  even before the API bugs. Verified by running the exact embedded Python
+  end-to-end against a synthetic Terraform fixture — see CHANGELOG.md
+  `[Unreleased] > Fixed` for the full verification detail.
+- ~~`.github/workflows/example-blast-radius.yml` references a different,
+  unverifiable repo~~ **Fixed 2026-09-21**: confirmed via authenticated
+  `gh api`/`gh repo view` (this sandbox now has real network + an
+  authenticated `gh`, unlike the earlier pass that recorded this as
+  unverifiable) that `Mullassery/pyblastradius-action` does not exist and
+  that `Mullassery/PyBlastRadius` has no `v1` tag/release. Repointed to
+  `uses: Mullassery/PyBlastRadius@main`.
+- **`cargo audit` now runs locally (network to github.com is reachable in
+  this environment as of 2026-09-21, unlike the earlier pass) and finds 3
+  real vulnerabilities**, not yet fixed (this is a version-bump problem,
+  out of scope for a quick-fix pass — flagged here for a dedicated
+  follow-up):
+  - `RUSTSEC-2026-0258` — `h2 0.3.27` unbounded empty DATA frames. Pulled
+    in transitively via `reqwest 0.11.27` -> `hyper 0.14.32` -> `h2`; fixing
+    requires bumping `reqwest` off its `0.11` line (a major version bump,
+    since `hyper 1.x`/`h2 0.4.16` aren't reachable from `hyper 0.14`).
+  - `RUSTSEC-2025-0020` / `RUSTSEC-2026-0177` — `pyo3 0.23.5` (buffer
+    overflow risk in `PyString::from_object`; missing `Sync` bound on
+    `PyCFunction::new_closure` closures). Fix requires `pyo3` >=0.24.1 /
+    >=0.29.0 — a major bump touching every binding in `src/python.rs`.
+  - `RUSTSEC-2025-0134` — `rustls-pemfile 1.0.4` is unmaintained (warning,
+    not a vulnerability).
+  The `cargo audit` job already added to `.github/workflows/ci.yml` will
+  now actually catch these on CI runners too.
 - **`Cargo.lock` was gitignored despite this crate producing a shipped
   application** (a Python extension module + formerly a CLI binary), which
   is the same "Cargo.lock must be committed" bug pattern seen across other
@@ -189,17 +186,16 @@ documentation-first pass:
   built from scratch. Worth a dedicated follow-up session to verify the
   Rust-level code's quality/completeness and wire it up, the same way
   Terraform was.
-- **`action.yml` / `example-blast-radius.yml`** — see bucket 3. Needs a
-  decision (fix vs. delete) and, if fixed, a real end-to-end test of the
-  composite action in a scratch repo.
-- **CONTRIBUTING.md's "Adding a New Discovery Engine" example** references
-  `src/bin/cli.rs`, which git history shows was intentionally removed
-  ("fix: Move CLI code to examples/ for wheels-only library build",
-  "fix: Remove src/bin/cli.rs from git tracking"). The CLI is now
-  `python/pyblastradius/cli.py`. This example section is stale and would
-  mislead a new contributor about where to wire up a new discoverer's CLI
-  flag; not fixed in this pass (needs someone who understands the current
-  Python CLI's `UriParser`/scan dispatch to write an accurate example).
+- ~~`action.yml` / `example-blast-radius.yml`~~ **Fixed 2026-09-21** — see
+  bucket 3. Note a full end-to-end test of the composite action running
+  inside actual GitHub Actions infrastructure (as opposed to running its
+  embedded Python logic locally, which was done) is still outstanding —
+  worth doing once this lands on GitHub.
+- ~~CONTRIBUTING.md's "Adding a New Discovery Engine" example references
+  `src/bin/cli.rs`~~ **Fixed 2026-09-21** — rewritten to describe the
+  actual pyo3-binding + `UriParser.create_discoverer` wiring path; also
+  fixed a second stale reference in "Clone & Build" (`cargo run --
+  --version`, which fails today — no `[[bin]]` target exists).
 - **No automated Python dependency scanning in CI** — `cargo audit` was
   added, but there's no `pip-audit` (or equivalent) CI job for the Python
   side. A one-time manual `pip-audit` run during this pass found no known
