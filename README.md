@@ -344,13 +344,6 @@ with file:line specifics** — this section is a summary, not the full picture:
   GraphQL endpoint.
 - The chat/incident-management integration structs in the Rust crate build correct payloads
   but never send them, and are not exposed to Python.
-- **The repo's own composite GitHub Action (`action.yml`) is broken, not just untested** —
-  its embedded script calls three nonexistent/incorrect Python APIs
-  (`BlastRadiusAnalyzer(graph)` as a constructor, `graph.services()`, `Graph.merge([...])` as
-  a static method) and uses GitHub's deprecated `::set-output` syntax. It has never worked as
-  shipped. `.github/workflows/example-blast-radius.yml` also references a possibly-different
-  repo (`Mullassery/pyblastradius-action@v1`) that could not be verified from this environment.
-  See ROADMAP_HONEST.md.
 - `python/pyblastradius/config.py` (the `blastradius.yml` config-file loader — 257 lines) has
   zero automated test coverage.
 
@@ -361,6 +354,13 @@ predecessor means no redundant path in, i.e. a SPOF) instead of incorrectly chec
 that predecessor also has other outgoing edges — branching topologies are now detected
 correctly. Both fixes are covered by dedicated branching-topology regression tests in
 `src/analysis/criticality.rs` and `tests/test_analysis.py`.
+
+The repo's own composite GitHub Action (`action.yml`) — previously non-functional, calling
+three nonexistent/incorrect Python APIs and using GitHub's deprecated `::set-output` syntax —
+is now fixed and verified end-to-end against a synthetic fixture;
+`.github/workflows/example-blast-radius.yml`'s reference to `Mullassery/pyblastradius-action@v1`
+was repointed to `Mullassery/PyBlastRadius@main`, the actual repo (the `@v1` tag never existed).
+See CHANGELOG.md for details.
 
 **Fixed in the 2026-09-19/20 OSS-standardization pass**: `pyproject.toml`'s `[tool.maturin]`
 was missing `include = ["LICENSE"]`, so `maturin sdist` omitted the license file — a recurring
