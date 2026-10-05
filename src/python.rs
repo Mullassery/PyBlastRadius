@@ -796,6 +796,144 @@ impl PyTerraformDiscoverer {
     }
 }
 
+/// Real Kubernetes manifest dependency discovery, via local YAML parsing
+/// and container-env-var reference inference (see `discovery::kubernetes`).
+///
+/// Previously the only `KubernetesDiscoverer` reachable from Python was a
+/// pure-Python placeholder in `pyblastradius.discovery` that globbed for
+/// `*.yaml` files and then did `pass` in the loop body, always returning
+/// an empty graph -- the real Rust implementation existed but was never
+/// exposed via pyo3. `pyblastradius/__init__.py` now imports this one
+/// instead.
+///
+/// `kubeconfig`/`context` are accepted for interface compatibility with
+/// the old Python stub's constructor (and with existing `blastradius.yml`
+/// configs / REST API payloads that pass them) but have no effect: this
+/// discoverer reads local manifest YAML files, not a live cluster, so
+/// there is no kubeconfig-based connection to make. If `manifests_dir`
+/// isn't given, the conventional `k8s`/`kubernetes`/`.` directories are
+/// probed in that order for the first one that exists -- the same
+/// directories the old stub listed, now actually parsed instead of
+/// discarded.
+///
+/// Note: `namespaces` is accepted and stored on the underlying Rust
+/// `KubernetesDiscoverer`, but that struct doesn't yet use it to filter
+/// discovered resources (see `discovery::kubernetes.rs`) -- passing it
+/// here has no effect yet either. Documented honestly rather than
+/// silently implying namespace filtering works.
+#[pyclass(name = "KubernetesDiscoverer")]
+pub struct PyKubernetesDiscoverer {
+    inner: crate::discovery::kubernetes::KubernetesDiscoverer,
+}
+
+#[pymethods]
+impl PyKubernetesDiscoverer {
+    #[new]
+    #[pyo3(signature = (manifests_dir=None, kubeconfig=None, context=None, namespaces=None))]
+    fn new(
+        manifests_dir: Option<String>,
+        kubeconfig: Option<String>,
+        context: Option<String>,
+        namespaces: Option<Vec<String>>,
+    ) -> Self {
+        let _ = (kubeconfig, context);
+
+        let dir = manifests_dir.or_else(|| {
+            ["k8s", "kubernetes", "."]
+                .into_iter()
+                .find(|d| std::path::Path::new(d).is_dir())
+                .map(|d| d.to_string())
+        });
+
+        let mut inner = match dir {
+            Some(dir) => {
+                crate::discovery::kubernetes::KubernetesDiscoverer::from_manifests_dir(dir)
+            }
+            None => crate::discovery::kubernetes::KubernetesDiscoverer::new(),
+        };
+        if let Some(namespaces) = namespaces {
+            inner = inner.with_namespaces(namespaces);
+        }
+
+        PyKubernetesDiscoverer { inner }
+    }
+
+    fn discover(&self) -> PyResult<PyGraph> {
+        let inner = self.inner.discover().map_err(core_err_to_py)?;
+        Ok(PyGraph { inner })
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "KubernetesDiscoverer(manifests_dir={:?})",
+            self.inner.manifests_dir
+        )
+    }
+}
+
+/// Real OTLP/gRPC trace-based dependency discovery (see `discovery::otlp`).
+///
+/// Previously the only `OtelDiscoverer` reachable from Python was a
+/// pure-Python placeholder in `pyblastradius.discovery` whose `discover()`
+/// body was just a comment ("Connect to OTLP collector and extract
+/// traces") followed by returning an empty graph -- the real Rust
+/// implementation existed but was never exposed via pyo3.
+///
+/// Important semantic correction vs. the old stub's docstring: this does
+/// **not** connect outward to a remote OTLP collector. It runs its own
+/// OTLP/gRPC trace *receiver* bound to `endpoint`, the same role a
+/// collector plays -- your instrumented services need to be configured to
+/// export spans *to* this address. `endpoint` must therefore be a literal
+/// `ip:port` listen address (e.g. `"0.0.0.0:4317"`), not a hostname; the
+/// old default `"localhost:4317"` would fail to parse for this reason, so
+/// the default here is `"0.0.0.0:4317"` instead.
+///
+/// `discover()` blocks for up to `duration_minutes` (converted to seconds
+/// for the real Rust `timeout_seconds` field) collecting whatever spans
+/// are actually received, then builds the dependency graph from real
+/// observed parent/child span pairs that cross a service boundary. It
+/// releases the GIL while blocked so it doesn't freeze other Python
+/// threads during the collection window.
+#[cfg(feature = "otlp-traces")]
+#[pyclass(name = "OtelDiscoverer")]
+pub struct PyOtelDiscoverer {
+    inner: crate::discovery::otlp::OtlpDiscoverer,
+}
+
+#[cfg(feature = "otlp-traces")]
+#[pymethods]
+impl PyOtelDiscoverer {
+    #[new]
+    #[pyo3(signature = (endpoint="0.0.0.0:4317".to_string(), duration_minutes=None, timeout_seconds=None))]
+    fn new(endpoint: String, duration_minutes: Option<u64>, timeout_seconds: Option<u64>) -> Self {
+        // `timeout_seconds` is the more precise real-unit override;
+        // `duration_minutes` is kept for interface compatibility with the
+        // old Python stub's constructor and existing config/REST payloads.
+        let seconds = timeout_seconds.or_else(|| duration_minutes.map(|m| m * 60));
+
+        let mut inner = crate::discovery::otlp::OtlpDiscoverer::new(endpoint);
+        if let Some(seconds) = seconds {
+            inner = inner.with_timeout(seconds);
+        }
+
+        PyOtelDiscoverer { inner }
+    }
+
+    fn discover(&self, py: Python<'_>) -> PyResult<PyGraph> {
+        let inner = py
+            .allow_threads(|| self.inner.discover())
+            .map_err(core_err_to_py)?;
+        Ok(PyGraph { inner })
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "OtelDiscoverer(endpoint={:?}, timeout_seconds={})",
+            self.inner.endpoint, self.inner.timeout_seconds
+        )
+    }
+}
+
 // ---------------------------------------------------------------------
 // Module
 // ---------------------------------------------------------------------
@@ -822,6 +960,9 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySimulator>()?;
 
     m.add_class::<PyTerraformDiscoverer>()?;
+    m.add_class::<PyKubernetesDiscoverer>()?;
+    #[cfg(feature = "otlp-traces")]
+    m.add_class::<PyOtelDiscoverer>()?;
 
     Ok(())
 }

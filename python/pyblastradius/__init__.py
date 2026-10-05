@@ -16,7 +16,7 @@ Quick start:
     print(f"Blast radius score: {result.blast_radius_score:.1f}/100")
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "Georgi Mammen Mullassery"
 __email__ = "mullassery@gmail.com"
 __license__ = "Apache-2.0"
@@ -53,6 +53,15 @@ try:
         # which was a pure-Python placeholder that discarded every .tf
         # file's contents and always returned an empty graph.
         TerraformDiscoverer,
+        # Real Kubernetes manifest discovery (local YAML parsing + env-var
+        # reference inference - see src/discovery/kubernetes.rs) and real
+        # OTLP/gRPC trace-based discovery (see src/discovery/otlp.rs).
+        # Import these instead of pyblastradius.discovery's
+        # KubernetesDiscoverer/OtelDiscoverer, which were pure-Python
+        # placeholders that always returned an empty graph (same situation
+        # TerraformDiscoverer was in before it was wired up).
+        KubernetesDiscoverer,
+        OtelDiscoverer,
     )
 except ImportError:
     # Fallback if Rust bindings not available (development mode)
@@ -70,14 +79,13 @@ except ImportError:
     CriticalityScorer = None
     Simulator = None
     TerraformDiscoverer = None
+    KubernetesDiscoverer = None
+    OtelDiscoverer = None
 
-# Python-only exports (Kubernetes/Airflow/Otel discovery has no real
-# implementation yet - see README "Not yet implemented")
-from pyblastradius.discovery import (
-    KubernetesDiscoverer,
-    AirflowDiscoverer,
-    OtelDiscoverer,
-)
+# Python-only exports. AirflowDiscoverer has no real implementation yet -
+# see README "Not yet implemented" - unlike Kubernetes/Terraform/Otel
+# discovery above, which are all now backed by the real Rust engine.
+from pyblastradius.discovery import AirflowDiscoverer
 from pyblastradius.analysis import (
     AnomalyDetector,
     HiddenDependencyDetector,

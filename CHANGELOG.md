@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-10-05
+
+### Added
+
+- **Real Kubernetes and OTLP dependency discovery**, wired up the same way
+  Terraform was in v0.3.0. `src/python.rs` gained `PyKubernetesDiscoverer`
+  and `PyOtelDiscoverer`, exposing the real, already-tested Rust parsers
+  (`src/discovery/kubernetes.rs`, `src/discovery/otlp.rs`) — which existed
+  the whole time but were never registered in the `#[pymodule]` block, so
+  `pyblastradius.KubernetesDiscoverer`/`OtelDiscoverer` were separate,
+  disconnected pure-Python stubs that always returned an empty graph.
+  - `KubernetesDiscoverer` now parses real Service/Deployment/StatefulSet/
+    DaemonSet YAML and infers edges from container env var references.
+    `kubeconfig`/`context` are accepted for interface compatibility with
+    the old stub's constructor (and existing `blastradius.yml`/REST API
+    payloads) but have no effect — there's no live-cluster API client,
+    only local manifest parsing. If `manifests_dir` isn't given, the
+    conventional `k8s`/`kubernetes`/`.` directories are probed for the
+    first one that exists.
+  - `OtelDiscoverer` now runs a real OTLP/gRPC trace receiver bound to
+    `endpoint`, collecting whatever spans are actually pushed to it during
+    the collection window and deriving edges from real cross-service
+    parent/child span pairs. This is a semantic correction, not just a
+    wiring fix: the old stub's docstring said it would "connect to OTLP
+    collector," but the real implementation is itself a receiver —
+    `endpoint` must be a literal `ip:port` listen address, not a hostname
+    (the old `"localhost:4317"` default would fail to parse for exactly
+    this reason; the new default is `"0.0.0.0:4317"`). `discover()`
+    releases the GIL for the full blocking collection window, verified
+    with a concurrent-thread test rather than just a lack-of-crash check.
+  - `tests/test_discovery_bindings.py` (new, 7 tests) exercises both
+    against the real compiled `_core` extension: real manifest parsing,
+    real OTLP bind/timeout/empty-window behavior, and the
+    `kubeconfig`/`context`/`namespaces` interface-compat notes above.
+
 ## [0.3.0] - 2026-08-26
 
 ### Added

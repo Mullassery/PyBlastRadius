@@ -51,6 +51,10 @@ class UriParser:
         """Create discoverer from scheme and parameters"""
         if scheme == "kubernetes":
             return KubernetesDiscoverer(
+                manifests_dir=params.get("manifests_dir"),
+                # kubeconfig/context are accepted for interface
+                # compatibility but have no effect -- KubernetesDiscoverer
+                # parses local manifests, not a live cluster (see README).
                 kubeconfig=params.get("kubeconfig"),
                 context=params.get("context"),
                 namespaces=params.get("namespaces", "").split(";") if params.get("namespaces") else None,
@@ -67,7 +71,10 @@ class UriParser:
             )
         elif scheme == "otlp":
             return OtelDiscoverer(
-                endpoint=params.get("endpoint", "localhost:4317"),
+                # Listen/bind address for PyBlastRadius's own OTLP receiver
+                # (not a remote collector to connect to) -- must be a
+                # literal ip:port, not a hostname like the old "localhost".
+                endpoint=params.get("endpoint", "0.0.0.0:4317"),
                 duration_minutes=int(params.get("duration", "60")),
             )
         elif scheme == "local":

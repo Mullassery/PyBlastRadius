@@ -35,12 +35,10 @@ from pyblastradius import (
     FailureType,
     Simulator,
     TerraformDiscoverer,
-)
-from pyblastradius.discovery import (
     KubernetesDiscoverer,
-    AirflowDiscoverer,
     OtelDiscoverer,
 )
+from pyblastradius.discovery import AirflowDiscoverer
 
 __version__ = "0.2.0"
 

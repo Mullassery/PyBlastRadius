@@ -25,16 +25,23 @@ relevant).
   token auth (`PYBLASTRADIUS_API_KEY`/`_KEYS`) and CORS allowlist. Covered
   by `tests/test_server.py`, verified passing 2026-09-19 (see Validation
   below for the exact reproduction steps and the `httpx` gotcha).
-- **README's "Kubernetes/OTel: Not implemented" claim in Platform Support
-  is correct for the Python-facing API** — verified by reading
-  `python/pyblastradius/discovery.py` directly: `KubernetesDiscoverer.discover()`
-  only globs for local `k8s`/`kubernetes` YAML files and then does
-  `pass` in the loop body (never parses them), always returning an empty
-  graph (or raising `ValueError` if no kubeconfig path exists at all).
-  `AirflowDiscoverer.discover()` and `OtelDiscoverer.discover()` are
-  one-line `return Graph()` stubs. None of these import from `_core` —
-  unlike `TerraformDiscoverer`, which `python/pyblastradius/__init__.py`
-  imports directly from the real Rust extension.
+- **`KubernetesDiscoverer` / `OtelDiscoverer`** — at the time of this
+  2026-09-19/20 audit, README's "Kubernetes/OTel: Not implemented" claim
+  was correct for the Python-facing API: `python/pyblastradius/discovery.py`'s
+  `KubernetesDiscoverer.discover()` only globbed for local `k8s`/`kubernetes`
+  YAML files and then did `pass` in the loop body (never parsing them),
+  and `OtelDiscoverer.discover()` was a one-line `return Graph()` stub.
+  Neither imported from `_core`, unlike `TerraformDiscoverer`. **Since
+  then (2026-10-05): both wired up**, the same way `TerraformDiscoverer`
+  was — `src/python.rs`'s `PyKubernetesDiscoverer`/`PyOtelDiscoverer` now
+  expose the real `src/discovery/kubernetes.rs`/`src/discovery/otlp.rs`
+  parsers. `python/pyblastradius/__init__.py` imports both from `_core`;
+  the old pure-Python stubs are deleted from `discovery.py`. Covered by
+  `tests/test_discovery_bindings.py` (7 tests against the real compiled
+  extension — real manifest parsing, real OTLP receiver bind/timeout/GIL
+  release, `kubeconfig`/`context`/`namespaces` interface-compat behavior).
+  `AirflowDiscoverer.discover()` is still a one-line `return Graph()` stub
+  — no equivalent real Rust-level Airflow parsing exists to wire up.
 - **`cargo fmt -- --check`** — clean.
 - **`cargo clippy --all-targets -- -D warnings`** — clean (fixed 9 real
   errors during this pass; see Technical Debt).
@@ -165,27 +172,18 @@ documentation-first pass:
   lines 34-47, 52-79, 91-111, 126-166, 211-231, 267-283, 344-368. The CLI
   is the primary documented user interface; more than half its lines are
   unexercised by the test suite.
-- **Real, tested Rust-level Kubernetes and OTLP parsing code
+- ~~Real, tested Rust-level Kubernetes and OTLP parsing code
   (`src/discovery/kubernetes.rs`, `src/discovery/otlp.rs`) is sitting
-  completely unreachable from Python.** Both have genuine parsing logic
-  and passing unit tests (e.g.
-  `test_kubernetes_discovery_parses_real_service_manifest`,
-  `test_kubernetes_discovery_infers_edges_from_env_vars`,
-  `test_cross_service_span_becomes_calls_edge`,
-  `test_latency_is_derived_from_real_span_timing` — all pass under
-  `cargo test`), but there is no `PyKubernetesDiscoverer`/`PyOtelDiscoverer`
-  in `src/python.rs`, so none of it is exposed via pyo3. The Python-facing
-  `KubernetesDiscoverer`/`OtelDiscoverer` in
-  `python/pyblastradius/discovery.py` are separate, disconnected
-  pure-Python stubs that always return an empty graph. This is exactly the
-  same situation `TerraformDiscoverer` was in before v0.3.0 wired it up
-  (see CHANGELOG's `[0.3.0]` entry) — meaning a large fraction of "a second
-  real discovery engine," already listed as this project's top near-term
-  roadmap item in README.md, may already exist and just need pyo3 bindings
-  plus swapping the Python stub for the real import, rather than being
-  built from scratch. Worth a dedicated follow-up session to verify the
-  Rust-level code's quality/completeness and wire it up, the same way
-  Terraform was.
+  completely unreachable from Python~~ **Fixed 2026-10-05**: added
+  `PyKubernetesDiscoverer`/`PyOtelDiscoverer` to `src/python.rs`'s
+  `#[pymodule]`, the same way `TerraformDiscoverer` was wired up in
+  v0.3.0. `pyblastradius.KubernetesDiscoverer`/`OtelDiscoverer` now import
+  the real bindings instead of the old disconnected pure-Python stubs
+  (deleted from `discovery.py`). See "What actually works" above and
+  CHANGELOG's `[Unreleased]` entry for the full detail, including the
+  OTLP receiver's GIL-release behavior during its blocking collection
+  window (verified with a concurrent-thread test, not just a lack-of-crash
+  check) and the `kubeconfig`/`namespaces` honesty notes.
 - ~~`action.yml` / `example-blast-radius.yml`~~ **Fixed 2026-09-21** — see
   bucket 3. Note a full end-to-end test of the composite action running
   inside actual GitHub Actions infrastructure (as opposed to running its

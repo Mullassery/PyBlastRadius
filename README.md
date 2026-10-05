@@ -19,10 +19,12 @@ Working today, backed by the real Rust engine (`pyblastradius._core`):
 - **REST API server** — FastAPI server with real bearer-token auth and an explicit CORS allowlist (`pyblastradius server`)
 - **CLI** — `analyze`, `criticality`, `simulate`, `visualize` commands operate on a graph you build or load from JSON
 - **Terraform discovery** — `TerraformDiscoverer` (used by `pyblastradius scan terraform://path=...`, `type: terraform` in `blastradius.yml`, and directly as `pyblastradius.TerraformDiscoverer`) parses real `.tf` files via `hcl-rs`, discovers any `resource "type" "name" { ... }` block (not limited to a handful of hardcoded AWS types), and derives real dependency edges from actual resource references found in each resource's own attribute values (`aws_db_instance.x.endpoint` bare traversals, and `"${aws_db_instance.x.endpoint}"` interpolated strings) — not a hardcoded example dependency list. Benchmarked in `benches/large_graph.rs` on graphs up to 1,000 nodes.
+- **Kubernetes discovery** — `KubernetesDiscoverer` (used by `pyblastradius scan kubernetes://manifests_dir=...`, `type: kubernetes` in `blastradius.yml`, and directly as `pyblastradius.KubernetesDiscoverer`) parses real Service/Deployment/StatefulSet/DaemonSet YAML manifests (`---`-separated multi-document files supported) and infers edges from container env var values that reference other discovered workload names. `kubeconfig`/`context` are accepted for interface compatibility but have no effect — there is no live-cluster API client, only local manifest parsing; `namespaces` is likewise accepted but not yet used to filter.
+- **OTLP trace discovery** — `OtelDiscoverer` (used by `pyblastradius scan otlp://endpoint=...`, `type: otlp` in `blastradius.yml`, and directly as `pyblastradius.OtelDiscoverer`) runs a real OTLP/gRPC trace *receiver* (the standard `TraceService.Export` RPC) bound to `endpoint`, collects whatever spans instrumented services actually push to it during the collection window, and builds edges from real cross-service parent/child span pairs with observed latency and error status. **This is a receiver you bind, not a client that connects to an existing collector** — `endpoint` must be a literal `ip:port` listen address (e.g. `"0.0.0.0:4317"`), and your services need to be configured to export to it.
 
 Not yet implemented (present as scaffolding/placeholders, listed here so you don't spend time debugging them):
 
-- **Dependency discovery (Kubernetes/Airflow/Otel)** — `KubernetesDiscoverer`, `AirflowDiscoverer`, `OtelDiscoverer` (used by `pyblastradius scan`) currently always return an empty graph. There is no YAML parsing or live cluster/API connection behind them yet. (Terraform discovery is real -- see Features above.)
+- **Airflow discovery** — `AirflowDiscoverer` (used by `pyblastradius scan`) currently always returns an empty graph. There is no DAG parsing or Airflow API connection behind it yet. (Terraform/Kubernetes/OTLP discovery are real — see Features above.)
 - **Hidden Dependency Detection / Anomaly Detection** — `HiddenDependencyDetector` and `AnomalyDetector` always return empty results; they are not wired to any metrics/trace source.
 - **`pyblastradius.integrations`** — `OtelCollectorClient` and `StatGuardianClient` are placeholders that return empty/fake data; `DbtManifestParser` genuinely parses a dbt `manifest.json` you already have on disk and is real.
 - **GraphQL API** — not exposed anywhere; the Rust crate has a query-string builder (`src/api/graphql.rs`) that nothing serves or executes.
@@ -48,19 +50,17 @@ pip install pyblastradius[server]
 
 ### CLI Usage
 
-`scan`'s `terraform://` source is real (see Features above) and will
-discover actual resources/dependencies from `.tf` files at the given path.
-`kubernetes://`/`airflow://`/`otel://` sources still always produce an
-empty graph — no YAML parsing or live cluster/API connection behind them
-yet. To analyze something real today with those, build a graph via the
-Python API below (or hand-write one and export it with `graph.to_json()`)
-and feed that JSON file into `analyze`/`criticality`/`simulate`.
+`scan`'s `terraform://`, `kubernetes://`, and `otlp://` sources are all real
+(see Features above). `airflow://` still always produces an empty graph —
+no DAG parsing or Airflow API connection behind it yet. To analyze
+something real today with that, build a graph via the Python API below (or
+hand-write one and export it with `graph.to_json()`) and feed that JSON
+file into `analyze`/`criticality`/`simulate`.
 
 ```bash
-# terraform:// is real; kubernetes:// still always produces an empty graph
-# for its part of the discovered graph (see Features)
+# terraform:// and kubernetes:// are both real
 pyblastradius scan \
-  kubernetes://kubeconfig=~/.kube/config \
+  kubernetes://manifests_dir=./k8s \
   terraform://path=./infrastructure
 
 # Analyze blast radius for a service (graph.json from Graph.to_json())
@@ -89,7 +89,7 @@ version: 1
 discovery:
   sources:
     - type: kubernetes
-      kubeconfig: ~/.kube/config
+      manifests_dir: ./k8s
     - type: terraform
       path: ./infrastructure
 
@@ -218,10 +218,10 @@ PyBlastRadius provides:
 - **Zero vendor lock-in** with an open-source stack
 
 These are the goals the project is designed around, not measured results —
-Terraform is the only discovery engine wired up to real parsing so far; the
-"automated dependency discovery" this depends on more broadly (Kubernetes,
-Airflow, OpenTelemetry) still isn't. Treat this section as intent, not a
-full claim about the current release.
+Terraform, Kubernetes, and OTLP are the discovery engines wired up to real
+parsing so far; the "automated dependency discovery" this depends on more
+broadly (Airflow) still isn't. Treat this section as intent, not a full
+claim about the current release.
 
 ## Platform Support
 
@@ -230,10 +230,10 @@ Discovery source integration status (i.e. what `pyblastradius scan` /
 
 | Discovery Source | Status | Notes |
 |-----------------|--------|----------|
-| Kubernetes | Not implemented | `discover()` always returns an empty graph; no manifest parsing or API calls |
+| Kubernetes | **Real** | `discover()` parses real Service/Deployment/StatefulSet/DaemonSet YAML manifests and infers edges from container env var references (see Features above); `kubeconfig`/`context`/live-cluster API access are not implemented |
 | Terraform | **Real** | `discover()` parses actual `.tf` files via `hcl-rs` and derives real dependency edges from resource references (see Features above) |
 | Airflow | Not implemented | `discover()` always returns an empty graph |
-| OpenTelemetry | Not implemented | `discover()` always returns an empty graph (there is a separate, real Rust OTLP client used by `examples/cli.rs`, but it is not exposed to the Python package) |
+| OpenTelemetry | **Real** | `discover()` runs a real OTLP/gRPC trace receiver and derives edges from actually-observed cross-service span pairs (see Features above) — it's a receiver you bind, not a client connecting to an existing collector |
 | dbt | Partial | `DbtManifestParser` genuinely parses a local `manifest.json` for column lineage |
 | StatGuardian | Not implemented | `StatGuardianClient` returns empty/hardcoded fake data |
 
@@ -316,6 +316,7 @@ run) rather than a rigorous end-to-end benchmark.
 | Phase 6 | REST API Server | Complete | FastAPI endpoints + OpenAPI, real API-key auth, explicit CORS allowlist |
 | v0.2.0 | Working Rust-Python bindings | Shipped | `pyblastradius._core` extension module, real end-to-end analysis, first-ever working `import pyblastradius`; discovery engines still not implemented (see Platform Support) |
 | v0.3.0 | Real Terraform discovery | Shipped | `TerraformDiscoverer` parses real `.tf` files via `hcl-rs` and derives real dependency edges (see Features); other discoverers still stubs |
+| v0.4.0 | Real Kubernetes + OTLP discovery | Shipped | `KubernetesDiscoverer`/`OtelDiscoverer` wired to the real Rust parsers the same way Terraform was in v0.3.0 (see Features); Airflow still a stub |
 | v1.0.0 | "Enterprise Edition" | Not started | No committed date — see Roadmap below for the concrete gaps this would require closing first |
 
 ## Known Issues
@@ -327,12 +328,11 @@ for the complete, bucketed list (built-and-tested / built-not-tested / CI-broken
 with file:line specifics** — this section is a summary, not the full picture:
 
 - Dependency discovery (`pyblastradius scan` and the `*Discoverer` classes) always returns an
-  empty graph for Kubernetes/Airflow/OTLP sources — no parsing or live connection is implemented
-  yet for those. Terraform discovery is real (see Features/Platform Support above).
-  **Notably, real, tested Rust-level parsing for Kubernetes and OTLP already exists**
-  (`src/discovery/kubernetes.rs`, `src/discovery/otlp.rs`, with passing `cargo test` coverage)
-  but is not exposed via pyo3 bindings at all — the Python-facing classes are separate,
-  disconnected stubs. This is the same state Terraform was in before v0.3.0 wired it up.
+  empty graph for the Airflow source — no DAG parsing or Airflow API connection is implemented
+  yet. Terraform, Kubernetes, and OTLP discovery are all real (see Features/Platform Support
+  above) — Kubernetes and OTLP were wired up to their existing, already-tested Rust-level
+  parsing (`src/discovery/kubernetes.rs`, `src/discovery/otlp.rs`) the same way Terraform was
+  in v0.3.0.
 - `HiddenDependencyDetector` is a mix: `detect_from_trace_gaps` (fan-out + async-keyword
   heuristic) and `detect_semantic_coupling` (name-similarity heuristic) are real logic, not
   stubs — but two of its four methods, `detect_from_query_logs` and `detect_from_config`, are
@@ -441,15 +441,13 @@ phases with the concrete gaps that are actually next, grounded in the
 Known Issues / Platform Support sections above.
 
 ### Near-term (no committed dates — concrete, code-grounded)
-- [ ] A second real discovery engine beyond Terraform. Kubernetes and OTLP
-  are both further along than previously documented here: real, tested
-  parsing already exists at the Rust level (`src/discovery/kubernetes.rs`,
-  `src/discovery/otlp.rs`), it's just never been exposed via pyo3 or wired
-  into the Python `KubernetesDiscoverer`/`OtelDiscoverer` classes, which
-  are still separate always-empty stubs (see Known Issues /
-  ROADMAP_HONEST.md). Wiring one of these up the way `TerraformDiscoverer`
-  was in v0.3.0 is likely less work than building a new discoverer from
-  scratch.
+- [x] ~~A second real discovery engine beyond Terraform~~ **Done**:
+  Kubernetes and OTLP are both now wired up the way `TerraformDiscoverer`
+  was in v0.3.0 — `src/python.rs`'s `PyKubernetesDiscoverer`/
+  `PyOtelDiscoverer` expose the real Rust parsing
+  (`src/discovery/kubernetes.rs`, `src/discovery/otlp.rs`) to
+  `pyblastradius.KubernetesDiscoverer`/`OtelDiscoverer`. See Features /
+  Platform Support above.
 - [ ] Resolve `HiddenDependencyDetector`'s two remaining MVP stubs
   (`detect_from_query_logs`, `detect_from_config`) — either implement
   them for real or remove them from the public surface so the class
