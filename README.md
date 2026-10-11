@@ -347,6 +347,12 @@ with file:line specifics** — this section is a summary, not the full picture:
 - `python/pyblastradius/config.py` (the `blastradius.yml` config-file loader — 257 lines) has
   zero automated test coverage.
 
+**Fixed in the 2026-10-11 error sweep**: `python/pyblastradius/integrations.py` referenced `Graph`
+in its type annotations without importing it (`F821`). Because `pyblastradius/__init__.py`
+re-exports names from `integrations`, a plain top-level import would introduce a circular import,
+so `Graph` is now imported under `typing.TYPE_CHECKING`. `ruff check python/ --select E9,F63,F7,F82`
+is clean and `import pyblastradius.integrations` succeeds.
+
 `CriticalityScorer`'s two previously-documented correctness bugs are now fixed:
 `criticality_score` no longer divides by 100 twice (it returns the documented 0–100 scale),
 and `is_single_point_of_failure` now checks the target node's own in-degree (exactly one

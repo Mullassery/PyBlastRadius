@@ -1,7 +1,10 @@
 """Integration clients for external systems."""
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 import json
+
+if TYPE_CHECKING:
+    from pyblastradius import Graph
 
 
 class OtelCollectorClient:
