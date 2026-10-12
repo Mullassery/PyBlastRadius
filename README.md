@@ -1,5 +1,7 @@
 # PyBlastRadius
 
+[![Grapify](https://img.shields.io/badge/Grapify-Code%20Scan-purple)](https://grapify.ai)
+
 ![PyPI](https://img.shields.io/pypi/v/pyblastradius)
 [![CI](https://github.com/Mullassery/PyBlastRadius/actions/workflows/ci.yml/badge.svg)](https://github.com/Mullassery/PyBlastRadius/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
