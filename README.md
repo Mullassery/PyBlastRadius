@@ -10,6 +10,29 @@
 
 **Operational Blast Radius Intelligence Platform** — Predict cascading failures and quantify business impact across infrastructure, data pipelines, and AI systems.
 
+> **Not to be confused with [PyDBTGuard](https://github.com/Mullassery/PyDBTGuard), [PyBeamGuard](https://github.com/Mullassery/PyBeamGuard), or [PyAirflowTester](https://github.com/Mullassery/PyAirflowTester):** those validate a single pipeline technology; PyBlastRadius simulates cascading-failure blast radius across infrastructure, data pipelines, and AI systems.
+
+## Which project do I need?
+
+Part of the Mullassery open-source family. These tools have similar names — here is the short version of who does what:
+
+| If you need to… | Use |
+| --- | --- |
+| Build a repository's dependency graph and match it against vulnerability advisories (Python, Rust, Node, containers) | [PyDeepMesh](https://github.com/Mullassery/PyDeepMesh) |
+| Understand *why* a Python dependency exists, who added it, and whether it is actually used | [PyDependencyCheck](https://github.com/Mullassery/PyDependencyCheck) |
+| Statically analyze a **dbt** project (risky tests, test blast radius, cost) | [PyDBTGuard](https://github.com/Mullassery/PyDBTGuard) |
+| Statically analyze **Apache Beam / Dataflow** pipelines (cost, hot keys, reliability) | [PyBeamGuard](https://github.com/Mullassery/PyBeamGuard) |
+| Validate **Airflow** DAGs and dbt runs | [PyAirflowTester](https://github.com/Mullassery/PyAirflowTester) |
+| Simulate cascading-failure **blast radius** across infrastructure, data pipelines, and AI systems | [PyBlastRadius](https://github.com/Mullassery/PyBlastRadius) |
+| Check the **quality of the data itself** at runtime (schema, drift, anomalies) | [StatGuardian](https://github.com/Mullassery/StatGuardian) |
+| Discover **devices, services, and vulnerabilities on a network** | [PyNetworkIntel](https://github.com/Mullassery/PyNetworkIntel) |
+| Discover and score **API security** risk (real traffic, agent/MCP, Cedar policy) | [PyAPICheck](https://github.com/Mullassery/PyAPICheck) |
+| Trace and root-cause **AI agent** failures | [PyAgentHound](https://github.com/Mullassery/PyAgentHound) |
+| Diagnose **RAG retrieval** failures | [PyVectorHound](https://github.com/Mullassery/PyVectorHound) |
+| Orchestrate **local, dependency-aware tasks** (DAG scheduler + content-addressed cache) | [PyTaskWireCheck](https://github.com/Mullassery/PyTaskWireCheck) |
+
+[Browse all projects →](https://github.com/Mullassery?tab=repositories)
+
 ## Features
 
 Working today, backed by the real Rust engine (`pyblastradius._core`):
@@ -481,14 +504,6 @@ Multi-region cascade analysis, autonomous remediation recommendations,
 industry-specific impact templates, and GDPR/data-residency support are
 plausible future directions but have no code, design doc, or timeline
 behind them yet — listed here only so they aren't lost, not as promises.
-
-## Related Projects
-
-Part of the Mullassery observability and data quality ecosystem:
-
-- **[StatGuardian](https://github.com/Mullassery/StatGuardian)** — Data quality monitoring and lineage
-- **[PyStreamMCP](https://github.com/Mullassery/PyStreamMCP)** — Streaming data intelligence
-- **[PyDependencyCheck](https://github.com/Mullassery/PyDependencyCheck)** — Dependency scanning
 
 ## Authors
 
