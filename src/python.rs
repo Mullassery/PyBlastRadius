@@ -921,7 +921,7 @@ impl PyOtelDiscoverer {
 
     fn discover(&self, py: Python<'_>) -> PyResult<PyGraph> {
         let inner = py
-            .allow_threads(|| self.inner.discover())
+            .detach(|| self.inner.discover())
             .map_err(core_err_to_py)?;
         Ok(PyGraph { inner })
     }
