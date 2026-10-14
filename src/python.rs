@@ -42,7 +42,7 @@ fn parse_node_id(s: &str) -> PyResult<NodeId> {
 // Enums
 // ---------------------------------------------------------------------
 
-#[pyclass(eq, eq_int, name = "NodeType")]
+#[pyclass(eq, eq_int, from_py_object, name = "NodeType")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PyNodeType {
     Service,
@@ -94,7 +94,7 @@ impl From<PyNodeType> for RNodeType {
     }
 }
 
-#[pyclass(eq, eq_int, name = "EdgeType")]
+#[pyclass(eq, eq_int, from_py_object, name = "EdgeType")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PyEdgeType {
     Calls,
@@ -140,7 +140,7 @@ impl From<PyEdgeType> for REdgeType {
     }
 }
 
-#[pyclass(eq, eq_int, name = "HealthStatus")]
+#[pyclass(eq, eq_int, from_py_object, name = "HealthStatus")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PyHealthStatus {
     Healthy,
@@ -171,7 +171,7 @@ impl From<PyHealthStatus> for RHealthStatus {
     }
 }
 
-#[pyclass(eq, eq_int, name = "FailureType")]
+#[pyclass(eq, eq_int, from_py_object, name = "FailureType")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PyFailureType {
     Outage,
@@ -197,7 +197,7 @@ impl From<PyFailureType> for RFailureType {
 // Node / Edge
 // ---------------------------------------------------------------------
 
-#[pyclass(name = "Node")]
+#[pyclass(from_py_object, name = "Node")]
 #[derive(Clone)]
 pub struct PyNode {
     pub(crate) inner: RNode,
@@ -302,7 +302,7 @@ impl PyNode {
     }
 }
 
-#[pyclass(name = "Edge")]
+#[pyclass(from_py_object, name = "Edge")]
 #[derive(Clone)]
 pub struct PyEdge {
     pub(crate) inner: REdge,
@@ -528,7 +528,7 @@ impl PyGraph {
 // Analysis result types
 // ---------------------------------------------------------------------
 
-#[pyclass(name = "BlastRadiusResult")]
+#[pyclass(from_py_object, name = "BlastRadiusResult")]
 #[derive(Clone)]
 pub struct PyBlastRadiusResult {
     #[pyo3(get)]
@@ -583,7 +583,7 @@ impl PyBlastRadiusResult {
     }
 }
 
-#[pyclass(name = "CriticalityScore")]
+#[pyclass(from_py_object, name = "CriticalityScore")]
 #[derive(Clone)]
 pub struct PyCriticalityScore {
     #[pyo3(get)]
@@ -623,7 +623,7 @@ impl PyCriticalityScore {
     }
 }
 
-#[pyclass(name = "SimulationResult")]
+#[pyclass(from_py_object, name = "SimulationResult")]
 #[derive(Clone)]
 pub struct PySimulationResult {
     #[pyo3(get)]
