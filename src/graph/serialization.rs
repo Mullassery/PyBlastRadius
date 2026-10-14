@@ -75,7 +75,7 @@ impl GraphExporter {
 
     pub fn export_yaml(graph: &Graph) -> Result<String> {
         let export = Self::build_export(graph);
-        serde_yaml::to_string(&export)
+        serde_norway::to_string(&export)
             .map_err(|e| Error::parse_error(format!("YAML export failed: {}", e)))
     }
 
@@ -164,7 +164,7 @@ impl GraphExporter {
                     nodes: graph.nodes().cloned().collect(),
                     edges: graph.edges().cloned().collect(),
                 };
-                serde_yaml::to_string(&snapshot).map_err(|e| {
+                serde_norway::to_string(&snapshot).map_err(|e| {
                     Error::parse_error(format!("graph snapshot YAML serialization failed: {}", e))
                 })?
             }
@@ -240,7 +240,7 @@ impl GraphImporter {
         let contents = std::fs::read_to_string(path)?;
         match path.extension().and_then(|e| e.to_str()) {
             Some("yaml") | Some("yml") => {
-                let snapshot: GraphSnapshot = serde_yaml::from_str(&contents).map_err(|e| {
+                let snapshot: GraphSnapshot = serde_norway::from_str(&contents).map_err(|e| {
                     Error::parse_error(format!("graph snapshot YAML parse failed: {}", e))
                 })?;
                 let mut graph = Graph::new();

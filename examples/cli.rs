@@ -419,9 +419,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let manifest_content = std::fs::read_to_string(&manifest)?;
             // Manifests are commonly multi-document (`---`-separated); take
             // the first document that actually names a service — plain
-            // `serde_yaml::from_str` errors out on multi-document input.
-            let service_name = serde_yaml::Deserializer::from_str(&manifest_content)
-                .filter_map(|doc| serde_yaml::Value::deserialize(doc).ok())
+            // `serde_norway::from_str` errors out on multi-document input.
+            let service_name = serde_norway::Deserializer::from_str(&manifest_content)
+                .filter_map(|doc| serde_norway::Value::deserialize(doc).ok())
                 .find_map(|v| {
                     v.get("metadata")
                         .and_then(|m| m.get("name"))

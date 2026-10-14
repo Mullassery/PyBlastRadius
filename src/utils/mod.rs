@@ -26,11 +26,11 @@ pub fn read_yaml_file<P: AsRef<Path>, T: for<'de> serde::de::Deserialize<'de>>(
     path: P,
 ) -> Result<T> {
     let content = read_file(path)?;
-    serde_yaml::from_str(&content).map_err(crate::error::Error::YamlError)
+    serde_norway::from_str(&content).map_err(crate::error::Error::YamlError)
 }
 
 pub fn write_yaml_file<P: AsRef<Path>, T: serde::ser::Serialize>(path: P, value: &T) -> Result<()> {
-    let content = serde_yaml::to_string(value)?;
+    let content = serde_norway::to_string(value)?;
     write_file(path, &content)
 }
 

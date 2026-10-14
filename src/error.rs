@@ -26,7 +26,7 @@ pub enum Error {
     JsonError(#[from] serde_json::Error),
 
     #[error("YAML error: {0}")]
-    YamlError(#[from] serde_yaml::Error),
+    YamlError(#[from] serde_norway::Error),
 
     #[error("Not found: {0}")]
     NotFound(String),

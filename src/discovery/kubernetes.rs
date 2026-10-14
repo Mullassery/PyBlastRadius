@@ -23,7 +23,7 @@ pub struct KubernetesDiscoverer {
 struct K8sManifest {
     kind: Option<String>,
     metadata: Option<K8sMetadata>,
-    spec: Option<serde_yaml::Value>,
+    spec: Option<serde_norway::Value>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -97,7 +97,7 @@ impl KubernetesDiscoverer {
             crate::error::Error::parse_error(format!("Failed to read {}: {}", path.display(), e))
         })?;
 
-        for document in serde_yaml::Deserializer::from_str(&content) {
+        for document in serde_norway::Deserializer::from_str(&content) {
             let manifest = match K8sManifest::deserialize(document) {
                 Ok(m) => m,
                 Err(_) => continue, // skip non-manifest / malformed documents rather than aborting the whole scan
@@ -198,7 +198,7 @@ impl KubernetesDiscoverer {
     /// spec (`spec.template.spec.containers[].env[].value`), or a Service
     /// spec (no-op there — services don't carry env vars). Used to infer
     /// which other workloads a container references by name.
-    fn extract_env_values(spec: &serde_yaml::Value) -> Vec<String> {
+    fn extract_env_values(spec: &serde_norway::Value) -> Vec<String> {
         let mut values = Vec::new();
         let containers = spec
             .get("template")
