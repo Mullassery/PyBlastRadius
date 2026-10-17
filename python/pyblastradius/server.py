@@ -18,38 +18,36 @@ import json
 import logging
 import os
 import secrets
-from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
+from typing import Any
 
 try:
-    from fastapi import FastAPI, HTTPException, BackgroundTasks, Security
-    from fastapi.security import APIKeyHeader
-    from fastapi.middleware.cors import CORSMiddleware
     import uvicorn
+    from fastapi import FastAPI, HTTPException, Security
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.security import APIKeyHeader
 except ImportError:
-    raise ImportError("FastAPI is required for REST API: pip install fastapi uvicorn")
+    raise ImportError("FastAPI is required for REST API: pip install fastapi uvicorn") from None
 
 from pyblastradius import (
-    Graph,
+    AirflowDiscoverer,
     BlastRadiusAnalyzer,
     CriticalityScorer,
-    FailureType,
-    Simulator,
-    TerraformDiscoverer,
+    Graph,
     KubernetesDiscoverer,
     OtelDiscoverer,
+    TerraformDiscoverer,
     __version__,
 )
-from pyblastradius.discovery import AirflowDiscoverer
 
 logger = logging.getLogger(__name__)
 
 # Store analysis results in memory (in production, use a database)
-analysis_cache: Dict[str, Dict[str, Any]] = {}
-graph_cache: Optional[Graph] = None
+analysis_cache: dict[str, dict[str, Any]] = {}
+graph_cache: Graph | None = None
 
 
-def _load_api_keys() -> List[str]:
+def _load_api_keys() -> list[str]:
     """Load configured API keys from the environment.
 
     Supports either PYBLASTRADIUS_API_KEYS (comma-separated list) or the
@@ -86,7 +84,7 @@ if _ALLOW_NO_AUTH:
 _api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 
-async def require_api_key(authorization: Optional[str] = Security(_api_key_header)) -> str:
+async def require_api_key(authorization: str | None = Security(_api_key_header)) -> str:
     """FastAPI dependency enforcing bearer API key auth on every protected route."""
     if _ALLOW_NO_AUTH and not _API_KEYS:
         return "unauthenticated-dev-mode"
@@ -107,7 +105,7 @@ async def require_api_key(authorization: Optional[str] = Security(_api_key_heade
     raise HTTPException(status_code=401, detail="Invalid API key")
 
 
-def _cors_origins() -> List[str]:
+def _cors_origins() -> list[str]:
     raw = os.environ.get("PYBLASTRADIUS_CORS_ORIGINS", "")
     return [o.strip() for o in raw.split(",") if o.strip()]
 
@@ -151,8 +149,8 @@ async def status(_: str = Security(require_api_key)):
 @dataclass
 class DiscoveryRequest:
     """Request for discovering dependencies"""
-    sources: List[Dict[str, str]]
-    namespaces: Optional[List[str]] = None
+    sources: list[dict[str, str]]
+    namespaces: list[str] | None = None
 
 
 @app.post("/api/v1/scan")
@@ -198,7 +196,7 @@ async def scan(request: DiscoveryRequest, _: str = Security(require_api_key)):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @dataclass
@@ -247,9 +245,9 @@ async def analyze(request: AnalysisRequest, _: str = Security(require_api_key)):
         }
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/v1/analyses/{analysis_id}")
@@ -292,7 +290,7 @@ async def criticality(request: CriticalityRequest, _: str = Security(require_api
         }
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/v1/graphs")
@@ -308,7 +306,7 @@ async def list_graphs(_: str = Security(require_api_key)):
 
 
 @app.post("/api/v1/graphs/load")
-async def load_graph(graph_json: Dict[str, Any], _: str = Security(require_api_key)):
+async def load_graph(graph_json: dict[str, Any], _: str = Security(require_api_key)):
     """Load a graph from JSON"""
     try:
         global graph_cache
@@ -320,7 +318,7 @@ async def load_graph(graph_json: Dict[str, Any], _: str = Security(require_api_k
         }
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/v1/openapi.json")

@@ -89,6 +89,20 @@ impl OtlpDiscoverer {
     }
 }
 
+impl super::DiscoveryProvider for OtlpDiscoverer {
+    fn scheme(&self) -> &'static str {
+        "otlp"
+    }
+
+    fn description(&self) -> &'static str {
+        "Bind a real OTLP/gRPC trace receiver and build edges from cross-service parent/child spans received during the collection window."
+    }
+
+    fn discover(&self) -> Result<Graph> {
+        OtlpDiscoverer::discover(self)
+    }
+}
+
 fn build_graph(resource_spans: &[ResourceSpans]) -> Result<Graph> {
     let mut graph = Graph::new();
     let mut node_ids: HashMap<String, NodeId> = HashMap::new();

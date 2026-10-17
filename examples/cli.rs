@@ -183,6 +183,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             println!("🔍 Scanning for dependencies...\n");
 
+            // These are only consumed by the `otlp-traces`-gated block below.
+            #[cfg(not(feature = "otlp-traces"))]
+            let _ = (&otlp, otlp_timeout_seconds);
+
             let mut graph = Graph::new();
             let mut sources_scanned = 0;
 

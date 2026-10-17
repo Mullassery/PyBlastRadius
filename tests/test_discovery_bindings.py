@@ -138,3 +138,109 @@ def test_otel_discoverer_timeout_seconds_overrides_duration_minutes():
         endpoint="127.0.0.1:0", duration_minutes=5, timeout_seconds=7
     )
     assert "timeout_seconds=7" in repr(discoverer)
+
+
+# ---------------------------------------------------------------------------
+# AirflowDiscoverer (real source-level DAG parser, see src/discovery/airflow.rs)
+#
+# Like Kubernetes/Otel before it, AirflowDiscoverer used to be a pure-Python
+# placeholder in pyblastradius.discovery that stored a host/port it never used
+# and always returned an empty graph. These tests exercise the real binding.
+# ---------------------------------------------------------------------------
+
+_ETL_DAG = """
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.providers.postgres.operators.postgres import PostgresOperator
+
+with DAG("etl", schedule=None) as dag:
+    extract = PythonOperator(task_id="extract")
+    transform = PythonOperator(task_id="transform")
+    load = PostgresOperator(
+        task_id="load",
+        conn_id="warehouse",
+        sql="INSERT INTO metrics SELECT * FROM raw",
+    )
+
+    extract >> transform >> load
+"""
+
+
+def _node_names(graph):
+    return {n.name for n in graph.nodes()}
+
+
+def _edge_pairs(graph):
+    names = {n.id: n.name for n in graph.nodes()}
+    return {(names[e.source], names[e.target]) for e in graph.edges()}
+
+
+def test_airflow_discoverer_parses_real_dag(tmp_path):
+    _write(tmp_path, "etl.py", _ETL_DAG)
+
+    graph = pbr.AirflowDiscoverer(dag_folder=str(tmp_path)).discover()
+
+    # The DAG, its three tasks, and the external systems the SQL/conn_id
+    # reference (the raw/metrics tables and the warehouse connection).
+    assert {
+        "etl",
+        "etl.extract",
+        "etl.transform",
+        "etl.load",
+        "raw",
+        "metrics",
+        "warehouse",
+    } <= _node_names(graph)
+
+    pairs = _edge_pairs(graph)
+    # The real `extract >> transform >> load` chain, upstream -> downstream.
+    assert ("etl.extract", "etl.transform") in pairs
+    assert ("etl.transform", "etl.load") in pairs
+    # ...and the external references, not a hardcoded demo chain.
+    assert ("etl.load", "warehouse") in pairs
+    assert ("etl.load", "metrics") in pairs
+
+
+def test_airflow_discoverer_does_not_fabricate_example_dependencies(tmp_path):
+    # A DAG with NO dependency operators must not invent the old hardcoded
+    # example_dag.load_data -> transform -> publish chain.
+    _write(
+        tmp_path,
+        "lonely.py",
+        """
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+
+with DAG("lonely") as dag:
+    only = PythonOperator(task_id="only")
+""",
+    )
+
+    graph = pbr.AirflowDiscoverer(dag_folder=str(tmp_path)).discover()
+    assert not any(n.name.startswith("example_dag") for n in graph.nodes())
+    assert "lonely.only" in _node_names(graph)
+
+
+def test_airflow_discoverer_missing_folder_returns_empty_graph(tmp_path):
+    graph = pbr.AirflowDiscoverer(dag_folder=str(tmp_path / "does-not-exist")).discover()
+    assert graph.node_count() == 0
+    assert graph.edge_count() == 0
+
+
+def test_airflow_discoverer_host_port_accepted_but_inert():
+    # host/port are kept only for compatibility with the old REST-API-shaped
+    # stub and existing configs; the dag_folder is what actually matters.
+    discoverer = pbr.AirflowDiscoverer(host="localhost", port=8080)
+    assert "dag_folder=\"dags\"" in repr(discoverer)
+    discoverer2 = pbr.AirflowDiscoverer(path="my_dags")
+    assert "dag_folder=\"my_dags\"" in repr(discoverer2)
+
+
+def test_available_providers_lists_the_real_schemes():
+    providers = dict(pbr.available_providers())
+    assert {"airflow", "kubernetes", "terraform", "otlp"} <= set(providers)
+    # Sorted by scheme for deterministic output, and each carries a
+    # non-empty, human-readable description.
+    assert list(dict(pbr.available_providers())) == sorted(providers)
+    assert all(desc for desc in providers.values())
+

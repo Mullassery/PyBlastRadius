@@ -934,6 +934,76 @@ impl PyOtelDiscoverer {
     }
 }
 
+/// Real Airflow DAG dependency discovery (see `discovery::airflow`).
+///
+/// Previously the only `AirflowDiscoverer` reachable from Python was a
+/// pure-Python placeholder in `pyblastradius.discovery` that stored a
+/// `host`/`port`, never used them, and whose `discover()` body was a comment
+/// followed by `return graph` -- an always-empty graph. The real Rust parser
+/// existed but (like Kubernetes/Otel before it) was never exposed via pyo3.
+///
+/// Unlike the old stub's mental model, this does **not** talk to the Airflow
+/// REST API at `host:port`. It parses DAG **Python source files** on disk,
+/// extracting real tasks and their `>>`/`<<`/`set_downstream`/`chain(...)`
+/// dependencies plus external systems referenced by operator class, `conn_id`
+/// and SQL. `host`/`port` are therefore accepted (and ignored) only so that
+/// existing `blastradius.yml` configs and REST payloads written against the
+/// old constructor keep loading. Point it at your DAGs with `dag_folder`
+/// (or `path`); when neither is given it defaults to the conventional `dags`
+/// directory.
+#[pyclass(name = "AirflowDiscoverer")]
+pub struct PyAirflowDiscoverer {
+    inner: crate::discovery::airflow::AirflowDiscoverer,
+}
+
+#[pymethods]
+impl PyAirflowDiscoverer {
+    #[new]
+    #[pyo3(signature = (dag_folder=None, host=None, port=None, path=None))]
+    fn new(
+        dag_folder: Option<String>,
+        host: Option<String>,
+        port: Option<u64>,
+        path: Option<String>,
+    ) -> Self {
+        // host/port are accepted for interface compatibility with the old
+        // REST-API-shaped stub and its configs; this parser reads DAG files
+        // from disk and has no HTTP connection to make.
+        let _ = (host, port);
+
+        let folder = dag_folder.or(path).unwrap_or_else(|| "dags".to_string());
+
+        PyAirflowDiscoverer {
+            inner: crate::discovery::airflow::AirflowDiscoverer::new(folder),
+        }
+    }
+
+    fn discover(&self) -> PyResult<PyGraph> {
+        let inner = self.inner.discover().map_err(core_err_to_py)?;
+        Ok(PyGraph { inner })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("AirflowDiscoverer(dag_folder={:?})", self.inner.dag_folder)
+    }
+}
+
+/// Enumerate every discovery scheme the installed build supports, as a list of
+/// `(scheme, description)` pairs, sorted by scheme.
+///
+/// This is backed by the same `ProviderRegistry` the Rust CLIs use, so the
+/// Python layer no longer needs a hand-maintained list that can drift from the
+/// real set of connectors. A scheme with no Python-facing wrapper (if one is
+/// ever added on the Rust side) still shows up here.
+#[pyfunction]
+fn available_providers() -> Vec<(String, String)> {
+    crate::discovery::default_registry()
+        .describe()
+        .into_iter()
+        .map(|info| (info.scheme, info.description))
+        .collect()
+}
+
 // ---------------------------------------------------------------------
 // Module
 // ---------------------------------------------------------------------
@@ -961,8 +1031,11 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_class::<PyTerraformDiscoverer>()?;
     m.add_class::<PyKubernetesDiscoverer>()?;
+    m.add_class::<PyAirflowDiscoverer>()?;
     #[cfg(feature = "otlp-traces")]
     m.add_class::<PyOtelDiscoverer>()?;
+
+    m.add_function(wrap_pyfunction!(available_providers, m)?)?;
 
     Ok(())
 }

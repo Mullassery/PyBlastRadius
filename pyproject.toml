@@ -127,3 +127,17 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 addopts = "--cov=pyblastradius --cov-report=term-missing --cov-report=html"
+
+# Lint gate (PYBLASTRADIUS-003): curated, high-signal ruleset (not `ALL`,
+# which is dominated by stylistic/docstring rules). E501 is left to the
+# formatter. `target-version` matches `requires-python = ">=3.10"`.
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["python"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF", "PIE", "PERF", "FURB"]
+ignore = [
+    "E501", # line length is the formatter's job, not the linter's
+]

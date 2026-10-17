@@ -143,3 +143,23 @@ jobs:
         with:
           name: pyblastradius-${{ matrix.os }}
           path: target/release/pyblastradius*
+
+  # Lint gate for the Python package (PYBLASTRADIUS-003). Uses the curated
+  # ruleset in pyproject.toml ([tool.ruff.lint]); previously the repo had
+  # no Python lint at all.
+  python-lint:
+    name: Python Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install "ruff>=0.5.0"
+
+      - name: Ruff
+        run: ruff check python/

@@ -3,22 +3,22 @@
 import json
 import sys
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+
 import click
 from rich.console import Console
-from rich.table import Table
 from rich.progress import Progress
+from rich.table import Table
 
 from . import (
-    KubernetesDiscoverer,
-    TerraformDiscoverer,
     AirflowDiscoverer,
-    OtelDiscoverer,
     BlastRadiusAnalyzer,
     CriticalityScorer,
-    Simulator,
     FailureType,
     Graph,
+    KubernetesDiscoverer,
+    OtelDiscoverer,
+    Simulator,
+    TerraformDiscoverer,
 )
 from .discovery import Discoverer
 
@@ -29,7 +29,7 @@ class UriParser:
     """Parse discovery URIs: scheme://key=value,key=value"""
 
     @staticmethod
-    def parse(uri: str) -> tuple[str, Dict[str, str]]:
+    def parse(uri: str) -> tuple[str, dict[str, str]]:
         """Parse URI into scheme and parameters"""
         if "://" not in uri:
             raise ValueError(f"Invalid URI format: {uri}")
@@ -47,7 +47,7 @@ class UriParser:
         return scheme, params
 
     @staticmethod
-    def create_discoverer(scheme: str, params: Dict[str, str]) -> Discoverer:
+    def create_discoverer(scheme: str, params: dict[str, str]) -> Discoverer:
         """Create discoverer from scheme and parameters"""
         if scheme == "kubernetes":
             return KubernetesDiscoverer(
@@ -66,8 +66,13 @@ class UriParser:
             )
         elif scheme == "airflow":
             return AirflowDiscoverer(
-                host=params.get("host", "localhost"),
-                port=int(params.get("port", "8080")),
+                # Airflow discovery parses DAG Python files on disk, not a
+                # live REST API, so `dag_folder` (alias `path`) is the real
+                # input. `host`/`port` are still accepted for backward
+                # compatibility with old URIs/configs but have no effect.
+                dag_folder=params.get("dag_folder", params.get("path", "dags")),
+                host=params.get("host"),
+                port=int(params["port"]) if params.get("port") else None,
             )
         elif scheme == "otlp":
             return OtelDiscoverer(
@@ -101,19 +106,20 @@ class LocalDiscoverer(Discoverer):
         discoverers = [
             ("Kubernetes", KubernetesDiscoverer()),
             ("Terraform", TerraformDiscoverer(path=str(self.path))),
-            ("Airflow", AirflowDiscoverer()),
+            ("Airflow", AirflowDiscoverer(dag_folder=str(self.path))),
         ]
 
-        found_any = False
         for name, discoverer in discoverers:
+            # Per-discoverer isolation is the point: one failing source must
+            # not abort the others, so the try/except has to stay inside the
+            # loop (PERF203's suggested hoist would change behavior).
             try:
                 sub_graph = discoverer.discover()
                 if sub_graph.node_count() > 0:
                     graph.merge(sub_graph)
-                    found_any = True
                     console.print(f"  ✓ {name}: {sub_graph.node_count()} nodes")
-            except Exception as e:
-                console.print(f"  ✗ {name}: {str(e)}", style="dim")
+            except Exception as e:  # noqa: PERF203
+                console.print(f"  ✗ {name}: {e!s}", style="dim")
 
         return graph
 
@@ -121,7 +127,6 @@ class LocalDiscoverer(Discoverer):
 @click.group()
 def cli():
     """PyBlastRadius - Operational Blast Radius Intelligence"""
-    pass
 
 
 @cli.command()
@@ -153,7 +158,7 @@ def scan(sources: tuple, output: str, verbose: bool):
                         if verbose:
                             console.print(f"  ✓ {scheme}: {sub_graph.node_count()} nodes")
                     except Exception as e:
-                        console.print(f"  ✗ {source_uri}: {str(e)}", style="red")
+                        console.print(f"  ✗ {source_uri}: {e!s}", style="red")
 
                     progress.advance(task)
 
@@ -166,7 +171,7 @@ def scan(sources: tuple, output: str, verbose: bool):
         console.print(f"\n💡 Next: pyblastradius analyze {output}")
 
     except Exception as e:
-        console.print(f"\n❌ Error: {str(e)}", style="red")
+        console.print(f"\n❌ Error: {e!s}", style="red")
         if verbose:
             import traceback
             traceback.print_exc()
@@ -217,7 +222,7 @@ def analyze(graph_file: str, service: str, max_depth: int, format: str):
             }, indent=2))
         elif format == "csv":
             # CSV output
-            click.echo(f"service,score,directly_impacted,indirectly_impacted")
+            click.echo("service,score,directly_impacted,indirectly_impacted")
             click.echo(f"{service},{score:.2f},{len(directly_impacted)},{len(indirectly_impacted)}")
         else:
             # Table output
@@ -238,7 +243,7 @@ def analyze(graph_file: str, service: str, max_depth: int, format: str):
                     console.print(f"  • {name}")
 
     except Exception as e:
-        console.print(f"❌ Error: {str(e)}", style="red")
+        console.print(f"❌ Error: {e!s}", style="red")
         sys.exit(1)
 
 
@@ -286,7 +291,7 @@ def criticality(graph_file: str, limit: int, format: str):
             console.print(table)
 
     except Exception as e:
-        console.print(f"❌ Error: {str(e)}", style="red")
+        console.print(f"❌ Error: {e!s}", style="red")
         sys.exit(1)
 
 
@@ -338,7 +343,7 @@ def simulate(graph_file: str, target: str, scenario: str):
         console.print(f"💰 Business Impact Score: {result.business_impact_score:.1f}")
 
     except Exception as e:
-        console.print(f"❌ Error: {str(e)}", style="red")
+        console.print(f"❌ Error: {e!s}", style="red")
         sys.exit(1)
 
 
@@ -371,7 +376,7 @@ def visualize(graph_file: str, output: str, format: str):
         console.print(f"✅ Visualization saved to: {output}")
 
     except Exception as e:
-        console.print(f"❌ Error: {str(e)}", style="red")
+        console.print(f"❌ Error: {e!s}", style="red")
         sys.exit(1)
 
 
@@ -422,7 +427,7 @@ def server(host: str, port: int):
     """Start REST API server"""
     try:
         from pyblastradius.server import run_server
-        console.print(f"🚀 Starting PyBlastRadius server...")
+        console.print("🚀 Starting PyBlastRadius server...")
         console.print(f"📡 Listening on {host}:{port}")
         console.print(f"📚 API docs: http://{host}:{port}/docs")
         run_server(host, port)
@@ -434,7 +439,7 @@ def server(host: str, port: int):
         )
         sys.exit(1)
     except Exception as e:
-        console.print(f"❌ Error: {str(e)}", style="red")
+        console.print(f"❌ Error: {e!s}", style="red")
         sys.exit(1)
 
 

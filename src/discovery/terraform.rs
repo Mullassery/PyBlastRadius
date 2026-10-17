@@ -145,6 +145,20 @@ impl TerraformDiscoverer {
     }
 }
 
+impl super::DiscoveryProvider for TerraformDiscoverer {
+    fn scheme(&self) -> &'static str {
+        "terraform"
+    }
+
+    fn description(&self) -> &'static str {
+        "Parse real .tf files via hcl-rs and derive dependency edges from actual resource references."
+    }
+
+    fn discover(&self) -> Result<Graph> {
+        TerraformDiscoverer::discover(self)
+    }
+}
+
 /// The short display name for a resource address ("aws_db_instance.production"
 /// -> "production") -- the type prefix is already captured via `discovered_via`
 /// and the node type, so the node's own name stays the human-meaningful part.

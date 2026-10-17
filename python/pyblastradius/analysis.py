@@ -22,7 +22,7 @@ findings - so that code depending on them does not crash, but they should
 not be relied on for real anomaly/hidden-dependency detection.
 """
 
-from typing import List, Dict, Any
+from typing import Any
 
 try:
     from pyblastradius._core import Graph
@@ -40,12 +40,12 @@ class AnomalyDetector:
     def __init__(self, graph: Graph):
         self.graph = graph
 
-    def detect(self, service: str) -> List[Dict[str, Any]]:
+    def detect(self, service: str) -> list[dict[str, Any]]:
         """Detect anomalies for a service. Placeholder: always returns []."""
         # Placeholder: would integrate with metrics/traces
         return []
 
-    def detect_all(self) -> Dict[str, List[Dict[str, Any]]]:
+    def detect_all(self) -> dict[str, list[dict[str, Any]]]:
         """Detect anomalies for all nodes in the graph. Placeholder: always empty per node."""
         anomalies = {}
         if self.graph is not None:
@@ -64,7 +64,7 @@ class HiddenDependencyDetector:
     def __init__(self, graph: Graph):
         self.graph = graph
 
-    def detect(self) -> List[Dict[str, Any]]:
+    def detect(self) -> list[dict[str, Any]]:
         """Detect hidden dependencies. Placeholder: always returns []."""
         # Placeholder: would scan logs, configs, etc.
         return []

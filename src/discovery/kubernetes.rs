@@ -261,6 +261,20 @@ impl KubernetesDiscoverer {
     }
 }
 
+impl super::DiscoveryProvider for KubernetesDiscoverer {
+    fn scheme(&self) -> &'static str {
+        "kubernetes"
+    }
+
+    fn description(&self) -> &'static str {
+        "Parse local Service/Deployment/StatefulSet/DaemonSet YAML manifests and infer edges from container env var references."
+    }
+
+    fn discover(&self) -> Result<Graph> {
+        KubernetesDiscoverer::discover(self)
+    }
+}
+
 impl Default for KubernetesDiscoverer {
     fn default() -> Self {
         Self::new()

@@ -4,7 +4,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 try:
     import yaml
@@ -16,7 +16,7 @@ except ImportError:
 class DiscoverySource:
     """Configuration for a discovery source"""
     type: str
-    params: Dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
     required: bool = True
 
 
@@ -31,14 +31,14 @@ class AnalysisConfig:
 class OutputConfig:
     """Configuration for output"""
     type: str  # json, html, slack, etc.
-    params: Dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class AlertConfig:
     """Configuration for alerts"""
     condition: str  # e.g. "blast_radius_score > 0.8"
-    actions: List[Dict[str, Any]] = field(default_factory=list)
+    actions: list[dict[str, Any]] = field(default_factory=list)
 
 
 class Config:
@@ -46,10 +46,10 @@ class Config:
 
     def __init__(self):
         self.version: str = "1"
-        self.discovery_sources: List[DiscoverySource] = []
+        self.discovery_sources: list[DiscoverySource] = []
         self.analysis: AnalysisConfig = AnalysisConfig()
-        self.outputs: List[OutputConfig] = []
-        self.alerts: List[AlertConfig] = []
+        self.outputs: list[OutputConfig] = []
+        self.alerts: list[AlertConfig] = []
 
     @classmethod
     def load_from_file(cls, path: str = "blastradius.yml") -> "Config":
@@ -74,7 +74,7 @@ class Config:
         """Create default configuration"""
         return cls()
 
-    def _load_from_dict(self, data: Dict[str, Any]) -> None:
+    def _load_from_dict(self, data: dict[str, Any]) -> None:
         """Load configuration from dictionary"""
         self.version = str(data.get("version", "1"))
 
@@ -161,12 +161,12 @@ class Config:
 
         return True
 
-    def merge_cli_args(self, args: Dict[str, Any]) -> None:
+    def merge_cli_args(self, args: dict[str, Any]) -> None:
         """Merge CLI arguments (overrides config file)"""
-        if "max_depth" in args and args["max_depth"]:
+        if args.get("max_depth"):
             self.analysis.max_depth = args["max_depth"]
 
-        if "sources" in args and args["sources"]:
+        if args.get("sources"):
             # CLI sources override config file sources
             self.discovery_sources.clear()
             for source_uri in args["sources"]:
@@ -192,14 +192,21 @@ class Config:
             params=params,
         ))
 
-    def create_discoverers(self) -> List:
+    def create_discoverers(self) -> list:
         """Create discoverer instances from configuration"""
-        from pyblastradius import KubernetesDiscoverer, OtelDiscoverer, TerraformDiscoverer
-        from pyblastradius.discovery import AirflowDiscoverer
+        from pyblastradius import (
+            AirflowDiscoverer,
+            KubernetesDiscoverer,
+            OtelDiscoverer,
+            TerraformDiscoverer,
+        )
 
         discoverers = []
 
         for source in self.discovery_sources:
+            # One bad source config must not prevent the remaining sources
+            # from being built, so the try/except stays per-iteration
+            # (PERF203's hoist would change behavior).
             try:
                 if source.type == "kubernetes":
                     discoverers.append(KubernetesDiscoverer(**source.params))
@@ -209,13 +216,15 @@ class Config:
                     discoverers.append(AirflowDiscoverer(**source.params))
                 elif source.type == "otlp":
                     discoverers.append(OtelDiscoverer(**source.params))
-            except Exception as e:
+            except Exception as e:  # noqa: PERF203
                 if source.required:
-                    raise ValueError(f"Failed to create {source.type} discoverer: {str(e)}")
+                    raise ValueError(
+                        f"Failed to create {source.type} discoverer: {e!s}"
+                    ) from e
 
         return discoverers
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary"""
         return {
             "version": self.version,
@@ -250,4 +259,4 @@ class Config:
         }
 
 
-__all__ = ["Config", "DiscoverySource", "AnalysisConfig", "OutputConfig", "AlertConfig"]
+__all__ = ["AlertConfig", "AnalysisConfig", "Config", "DiscoverySource", "OutputConfig"]
