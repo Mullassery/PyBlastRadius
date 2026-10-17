@@ -14,10 +14,13 @@ No wildcard is used. If unset, no cross-origin browser access is permitted
 way, since CORS is a browser-enforced policy).
 """
 
+import collections
 import json
 import logging
 import os
 import secrets
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -65,6 +68,33 @@ def _load_api_keys() -> list[str]:
 _API_KEYS = _load_api_keys()
 _ALLOW_NO_AUTH = os.environ.get("PYBLASTRADIUS_ALLOW_NO_AUTH") == "1"
 
+# Simple per-key sliding-window rate limiter. 0 disables it. Keys rotate by
+# adding a new value to PYBLASTRADIUS_API_KEYS and removing the old one once
+# clients have migrated, so no separate rotation endpoint is required.
+_RATE_LIMIT_PER_MINUTE = int(os.environ.get("PYBLASTRADIUS_RATE_LIMIT_PER_MINUTE", "120"))
+_rate_buckets: dict[str, collections.deque[float]] = {}
+_rate_lock = threading.Lock()
+
+
+def _enforce_rate_limit(key: str) -> None:
+    """Raise HTTP 429 when `key` exceeds the configured per-minute budget."""
+    if _RATE_LIMIT_PER_MINUTE <= 0:
+        return
+    now = time.monotonic()
+    with _rate_lock:
+        bucket = _rate_buckets.setdefault(key, collections.deque())
+        cutoff = now - 60.0
+        while bucket and bucket[0] < cutoff:
+            bucket.popleft()
+        if len(bucket) >= _RATE_LIMIT_PER_MINUTE:
+            retry_after = max(1, int(60.0 - (now - bucket[0])))
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded",
+                headers={"Retry-After": str(retry_after)},
+            )
+        bucket.append(now)
+
 if not _API_KEYS and not _ALLOW_NO_AUTH:
     raise RuntimeError(
         "No API key configured for the PyBlastRadius REST server. Set "
@@ -87,6 +117,7 @@ _api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 async def require_api_key(authorization: str | None = Security(_api_key_header)) -> str:
     """FastAPI dependency enforcing bearer API key auth on every protected route."""
     if _ALLOW_NO_AUTH and not _API_KEYS:
+        _enforce_rate_limit("unauthenticated-dev-mode")
         return "unauthenticated-dev-mode"
 
     if not authorization:
@@ -100,6 +131,7 @@ async def require_api_key(authorization: str | None = Security(_api_key_header))
     # key material via timing side channels.
     for key in _API_KEYS:
         if secrets.compare_digest(token, key):
+            _enforce_rate_limit(token)
             return token
 
     raise HTTPException(status_code=401, detail="Invalid API key")

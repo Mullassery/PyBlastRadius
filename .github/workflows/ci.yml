@@ -163,3 +163,29 @@ jobs:
 
       - name: Ruff
         run: ruff check python/
+
+  # Python-side security scanning (Gemini review: only Rust had a
+  # continuous audit). Bandit for code patterns, pip-audit for dependency
+  # CVEs, both blocking.
+  python-security:
+    name: Python Security (bandit + pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install scanners
+        run: pip install "bandit>=1.7" "pip-audit>=2.7"
+
+      - name: Bandit
+        run: bandit -r python/ -ll
+
+      - name: pip-audit
+        run: pip-audit .
