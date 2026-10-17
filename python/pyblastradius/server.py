@@ -15,6 +15,7 @@ way, since CORS is a browser-enforced policy).
 """
 
 import json
+import logging
 import os
 import secrets
 from typing import Optional, List, Dict, Any
@@ -37,10 +38,11 @@ from pyblastradius import (
     TerraformDiscoverer,
     KubernetesDiscoverer,
     OtelDiscoverer,
+    __version__,
 )
 from pyblastradius.discovery import AirflowDiscoverer
 
-__version__ = "0.2.0"
+logger = logging.getLogger(__name__)
 
 # Store analysis results in memory (in production, use a database)
 analysis_cache: Dict[str, Dict[str, Any]] = {}
@@ -72,6 +74,13 @@ if not _API_KEYS and not _ALLOW_NO_AUTH:
         "the server, or explicitly set PYBLASTRADIUS_ALLOW_NO_AUTH=1 to run "
         "unauthenticated for local development only. Refusing to start "
         "unauthenticated by default so this can never be silently exposed."
+    )
+
+if _ALLOW_NO_AUTH:
+    logger.warning(
+        "SECURITY WARNING: PYBLASTRADIUS_ALLOW_NO_AUTH=1 is set - the "
+        "PyBlastRadius REST server is running with authentication DISABLED "
+        "when no API keys are configured. Never use this in production."
     )
 
 _api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
