@@ -46,6 +46,8 @@ dependencies = [
 pyblastradius = "pyblastradius.cli:main"
 
 [project.optional-dependencies]
+# Embedded architecture/knowledge-graph engine behind tools/codeatlas.
+architecture = ["codeatlas-rs>=0.3.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

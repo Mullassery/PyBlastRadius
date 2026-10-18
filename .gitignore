@@ -61,4 +61,4 @@ venv/
 .DS_Store
 Thumbs.db
 
-graphify-out/
+codeatlas-out/
