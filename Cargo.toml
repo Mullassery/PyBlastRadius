@@ -40,7 +40,7 @@ futures = "0.3"
 regex = "1.10"
 lazy_static = "1.4"
 xml-rs = "0.8"
-toml = "0.8"
+toml = "1.1"
 # Real HCL2 parser for Terraform resource discovery (replaces the previous
 # regex-based extraction, which could not correctly handle multi-line
 # blocks, nested blocks, or comments containing lookalike text).
