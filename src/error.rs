@@ -37,6 +37,9 @@ pub enum Error {
     #[error("Timeout: {0}")]
     Timeout(String),
 
+    #[error("HTTP error: {0}")]
+    HttpError(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }

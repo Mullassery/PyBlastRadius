@@ -1,14 +1,45 @@
 use serde::{Deserialize, Serialize};
 
-// Slack/PagerDuty client stubs.
+// Slack/PagerDuty clients.
 //
-// **Not wired to a real HTTP client.** These build the correct outbound
-// payload shape but never send it — the `reqwest` POST calls are commented
-// out below and each method just returns `Ok(())` / a hardcoded fake id.
-// They exist to document the intended integration shape, not as working
-// notification/incident clients. Do not rely on these for real alerting
-// until they're wired to an HTTP client; this is tracked as a known gap
-// rather than something this crate claims to do today.
+// Outbound dispatch is real when the default `http-discovery` feature
+// (which enables `reqwest`) is on. Without that feature, calls return a
+// configuration error instead of silently succeeding.
+
+#[cfg(feature = "http-discovery")]
+async fn post_json(
+    url: &str,
+    payload: &serde_json::Value,
+) -> crate::error::Result<serde_json::Value> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| crate::error::Error::HttpError(format!("client init failed: {e}")))?;
+    let response = client
+        .post(url)
+        .json(payload)
+        .send()
+        .await
+        .map_err(|e| crate::error::Error::HttpError(format!("request failed: {e}")))?;
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(crate::error::Error::HttpError(format!(
+            "webhook returned HTTP {status}: {body}"
+        )));
+    }
+    Ok(serde_json::from_str(&body).unwrap_or(serde_json::Value::Null))
+}
+
+#[cfg(not(feature = "http-discovery"))]
+async fn post_json(
+    _url: &str,
+    _payload: &serde_json::Value,
+) -> crate::error::Result<serde_json::Value> {
+    Err(crate::error::Error::ConfigError(
+        "webhook dispatch requires the `http-discovery` feature (enabled by default)".to_string(),
+    ))
+}
 
 /// Slack Bot Integration for incident notifications
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,7 +72,7 @@ impl SlackIntegration {
     ) -> crate::error::Result<()> {
         let affected_list = affected_services.join(", ");
 
-        let _payload = serde_json::json!({
+        let payload = serde_json::json!({
             "channel": self.channel,
             "username": self.bot_name.clone().unwrap_or_default(),
             "text": format!("🚨 Blast Radius Analysis for {}", service_name),
@@ -67,13 +98,7 @@ impl SlackIntegration {
             }]
         });
 
-        // In production: Use reqwest to POST to webhook_url
-        // reqwest::Client::new()
-        //     .post(&self.webhook_url)
-        //     .json(&payload)
-        //     .send()
-        //     .await?;
-
+        post_json(&self.webhook_url, &payload).await?;
         Ok(())
     }
 
@@ -85,7 +110,7 @@ impl SlackIntegration {
         severity: f32,
         predicted_ttf: u32,
     ) -> crate::error::Result<()> {
-        let _payload = serde_json::json!({
+        let payload = serde_json::json!({
             "channel": self.channel,
             "username": self.bot_name.clone().unwrap_or_default(),
             "text": format!("⚠️ Anomaly Detected on {}", node_name),
@@ -116,7 +141,7 @@ impl SlackIntegration {
             }]
         });
 
-        // In production: POST to webhook_url
+        post_json(&self.webhook_url, &payload).await?;
         Ok(())
     }
 }
@@ -143,7 +168,7 @@ impl PagerDutyIntegration {
         blast_score: f32,
         description: &str,
     ) -> crate::error::Result<String> {
-        let _payload = serde_json::json!({
+        let payload = serde_json::json!({
             "routing_key": self.integration_key,
             "event_action": "trigger",
             "dedup_key": format!("blast-{}-{}", service_name, chrono::Utc::now().timestamp()),
@@ -159,28 +184,32 @@ impl PagerDutyIntegration {
             }
         });
 
-        // In production: POST to PagerDuty API
-        // let response = reqwest::Client::new()
-        //     .post(self.api_url.as_ref().unwrap())
-        //     .json(&payload)
-        //     .send()
-        //     .await?;
-        //
-        // let result: serde_json::Value = response.json().await?;
-        // Ok(result["id"].as_str().unwrap_or("unknown").to_string())
-
-        Ok("incident-123".to_string())
+        let url = self
+            .api_url
+            .as_deref()
+            .unwrap_or("https://events.pagerduty.com/v2/enqueue");
+        let response = post_json(url, &payload).await?;
+        Ok(response
+            .get("dedup_key")
+            .or_else(|| response.get("id"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown")
+            .to_string())
     }
 
     /// Resolve PagerDuty incident
     pub async fn resolve_incident(&self, incident_id: &str) -> crate::error::Result<()> {
-        let _payload = serde_json::json!({
+        let payload = serde_json::json!({
             "routing_key": self.integration_key,
             "event_action": "resolve",
             "dedup_key": incident_id
         });
 
-        // In production: POST to PagerDuty API
+        let url = self
+            .api_url
+            .as_deref()
+            .unwrap_or("https://events.pagerduty.com/v2/enqueue");
+        post_json(url, &payload).await?;
         Ok(())
     }
 }
@@ -232,28 +261,65 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_slack_anomaly_alert() {
-        let slack = SlackIntegration::new("https://hooks.slack.com/services/...".to_string());
-
-        let result = slack
-            .send_anomaly_alert("postgres", "latency_spike", 0.85, 15)
+    async fn test_slack_alert_posts_to_webhook() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body("ok")
+            .create_async()
             .await;
 
-        assert!(result.is_ok());
+        let slack = SlackIntegration::new(server.url());
+        slack
+            .send_blast_radius_alert("payment-service", 0.95, vec!["db".to_string()])
+            .await
+            .unwrap();
+
+        mock.assert_async().await;
     }
 
     #[tokio::test]
-    async fn test_pagerduty_create_incident() {
-        let pd = PagerDutyIntegration::new("key123".to_string());
+    async fn test_pagerduty_create_incident_returns_dedup_key() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/")
+            .with_status(202)
+            .with_body(r#"{"dedup_key":"abc123"}"#)
+            .create_async()
+            .await;
 
-        let result = pd
+        let mut pd = PagerDutyIntegration::new("key123".to_string());
+        pd.api_url = Some(server.url());
+        let id = pd
             .create_incident(
                 "payment-service",
                 0.95,
                 "Payment service blast radius critical",
             )
+            .await
+            .unwrap();
+
+        assert_eq!(id, "abc123");
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_webhook_http_error_is_surfaced() {
+        let mut server = mockito::Server::new_async().await;
+        server
+            .mock("POST", "/")
+            .with_status(500)
+            .with_body("boom")
+            .create_async()
             .await;
 
-        assert!(result.is_ok());
+        let slack = SlackIntegration::new(server.url());
+        let error = slack
+            .send_anomaly_alert("postgres", "latency_spike", 0.85, 15)
+            .await
+            .unwrap_err();
+
+        assert!(error.to_string().contains("HTTP 500"), "{error}");
     }
 }
