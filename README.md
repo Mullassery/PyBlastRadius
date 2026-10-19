@@ -422,6 +422,16 @@ this note described (that issue is not currently reproducing; if it resurfaces, 
 [Actions tab](https://github.com/Mullassery/PyBlastRadius/actions) for current status rather
 than trusting either this note or the badge at the top of this file in isolation).
 
+## Known issues and deferred work
+
+**Blocked / failed:**
+- Airflow discovery (currently empty); narrow PR-impact workflow.
+
+**Rejected / deferred:**
+- Service-catalog/incident-management parity.
+
+Full shipped/blocked/rejected detail: [`QUEUE_STATUS.md`](QUEUE_STATUS.md).
+
 ## Queue status
 
 Shipped, blocked/failed, and rejected work for this repository is documented in
