@@ -20,6 +20,9 @@ use crate::analysis::{
     CriticalityScore as RCriticalityScore, CriticalityScorer as RCriticalityScorer,
     FailureType as RFailureType, SimulationResult as RSimulationResult, Simulator as RSimulator,
 };
+use crate::api::integrations::{
+    PagerDutyIntegration as RPagerDutyIntegration, SlackIntegration as RSlackIntegration,
+};
 use crate::error::Error as CoreError;
 use crate::graph::edge::EdgeProperties;
 use crate::graph::node::{HealthStatus as RHealthStatus, NodeId, NodeProperties};
@@ -30,6 +33,32 @@ use crate::graph::{
 
 fn core_err_to_py(e: CoreError) -> PyErr {
     PyRuntimeError::new_err(e.to_string())
+}
+
+/// Drive an async Rust future from a synchronous Python method.
+///
+/// The webhook clients are `async` because they use `reqwest`; Python callers
+/// get ordinary blocking methods backed by a fresh current-thread runtime.
+fn block_on_raw<F>(future: F) -> Result<F::Output, String>
+where
+    F: std::future::Future,
+{
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("failed to build tokio runtime: {e}"))
+        .map(|runtime| runtime.block_on(future))
+}
+
+fn block_on<F>(future: F) -> PyResult<F::Output>
+where
+    F: std::future::Future,
+{
+    Ok(tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| PyRuntimeError::new_err(format!("failed to build tokio runtime: {e}")))?
+        .block_on(future))
 }
 
 fn parse_node_id(s: &str) -> PyResult<NodeId> {
@@ -752,6 +781,174 @@ impl PySimulator {
 }
 
 // ---------------------------------------------------------------------
+// Integrations (real Slack / PagerDuty webhook dispatch)
+// ---------------------------------------------------------------------
+
+/// Slack incoming-webhook client.
+///
+/// Every method performs a real HTTP POST (10s timeout) to the configured
+/// webhook URL and raises `RuntimeError` on transport failures or non-2xx
+/// responses. No payload is fabricated or silently dropped.
+#[pyclass(name = "SlackIntegration")]
+pub struct PySlackIntegration {
+    inner: RSlackIntegration,
+}
+
+#[pymethods]
+impl PySlackIntegration {
+    #[new]
+    #[pyo3(signature = (webhook_url, channel=None, bot_name=None))]
+    fn new(webhook_url: String, channel: Option<String>, bot_name: Option<String>) -> Self {
+        let mut inner = RSlackIntegration::new(webhook_url);
+        if let Some(channel) = channel {
+            inner = inner.with_channel(channel);
+        }
+        if let Some(bot_name) = bot_name {
+            inner.bot_name = Some(bot_name);
+        }
+        PySlackIntegration { inner }
+    }
+
+    #[getter]
+    fn webhook_url(&self) -> &str {
+        &self.inner.webhook_url
+    }
+
+    #[getter]
+    fn channel(&self) -> Option<String> {
+        self.inner.channel.clone()
+    }
+
+    #[getter]
+    fn bot_name(&self) -> Option<String> {
+        self.inner.bot_name.clone()
+    }
+
+    /// Send a blast-radius alert to Slack.
+    fn send_blast_radius_alert(
+        &self,
+        py: Python<'_>,
+        service_name: &str,
+        blast_score: f32,
+        affected_services: Vec<String>,
+    ) -> PyResult<()> {
+        let inner = self.inner.clone();
+        let service_name = service_name.to_string();
+        let result = py
+            .detach(move || {
+                block_on_raw(inner.send_blast_radius_alert(
+                    &service_name,
+                    blast_score,
+                    affected_services,
+                ))
+            })
+            .map_err(PyRuntimeError::new_err)?;
+        result.map_err(core_err_to_py)
+    }
+
+    /// Send an anomaly alert to Slack.
+    fn send_anomaly_alert(
+        &self,
+        py: Python<'_>,
+        node_name: &str,
+        anomaly_type: &str,
+        severity: f32,
+        predicted_ttf: u32,
+    ) -> PyResult<()> {
+        let inner = self.inner.clone();
+        let node_name = node_name.to_string();
+        let anomaly_type = anomaly_type.to_string();
+        let result = py
+            .detach(move || {
+                block_on_raw(inner.send_anomaly_alert(
+                    &node_name,
+                    &anomaly_type,
+                    severity,
+                    predicted_ttf,
+                ))
+            })
+            .map_err(PyRuntimeError::new_err)?;
+        result.map_err(core_err_to_py)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "SlackIntegration(webhook_url={:?}, channel={:?})",
+            self.inner.webhook_url, self.inner.channel
+        )
+    }
+}
+
+/// PagerDuty Events API v2 client.
+///
+/// `create_incident`/`resolve_incident` perform real HTTP POSTs and raise
+/// `RuntimeError` on transport failures or non-2xx responses. `create_incident`
+/// returns the `dedup_key` from the PagerDuty response.
+#[pyclass(name = "PagerDutyIntegration")]
+pub struct PyPagerDutyIntegration {
+    inner: RPagerDutyIntegration,
+}
+
+#[pymethods]
+impl PyPagerDutyIntegration {
+    #[new]
+    #[pyo3(signature = (integration_key, api_url=None))]
+    fn new(integration_key: String, api_url: Option<String>) -> Self {
+        let mut inner = RPagerDutyIntegration::new(integration_key);
+        if let Some(api_url) = api_url {
+            inner.api_url = Some(api_url);
+        }
+        PyPagerDutyIntegration { inner }
+    }
+
+    #[getter]
+    fn integration_key(&self) -> &str {
+        &self.inner.integration_key
+    }
+
+    #[getter]
+    fn api_url(&self) -> Option<String> {
+        self.inner.api_url.clone()
+    }
+
+    /// Trigger a PagerDuty incident and return its `dedup_key`.
+    fn create_incident(
+        &self,
+        py: Python<'_>,
+        service_name: &str,
+        blast_score: f32,
+        description: &str,
+    ) -> PyResult<String> {
+        let inner = self.inner.clone();
+        let service_name = service_name.to_string();
+        let description = description.to_string();
+        let result = py
+            .detach(move || {
+                block_on_raw(inner.create_incident(&service_name, blast_score, &description))
+            })
+            .map_err(PyRuntimeError::new_err)?;
+        result.map_err(core_err_to_py)
+    }
+
+    /// Resolve a previously triggered PagerDuty incident.
+    fn resolve_incident(&self, py: Python<'_>, incident_id: &str) -> PyResult<()> {
+        let inner = self.inner.clone();
+        let incident_id = incident_id.to_string();
+        let result = py
+            .detach(move || block_on_raw(inner.resolve_incident(&incident_id)))
+            .map_err(PyRuntimeError::new_err)?;
+        result.map_err(core_err_to_py)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "PagerDutyIntegration(integration_key={:?}, api_url={:?})",
+            self.inner.integration_key, self.inner.api_url
+        )
+    }
+}
+
+// ---------------------------------------------------------------------
 // Discovery
 // ---------------------------------------------------------------------
 
@@ -1028,6 +1225,9 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBlastRadiusAnalyzer>()?;
     m.add_class::<PyCriticalityScorer>()?;
     m.add_class::<PySimulator>()?;
+
+    m.add_class::<PySlackIntegration>()?;
+    m.add_class::<PyPagerDutyIntegration>()?;
 
     m.add_class::<PyTerraformDiscoverer>()?;
     m.add_class::<PyKubernetesDiscoverer>()?;
