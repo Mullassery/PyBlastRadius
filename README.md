@@ -53,7 +53,7 @@ Not yet implemented (present as scaffolding/placeholders, listed here so you don
 - **Hidden Dependency Detection / Anomaly Detection** — `HiddenDependencyDetector` and `AnomalyDetector` always return empty results; they are not wired to any metrics/trace source.
 - **`pyblastradius.integrations`** — `OtelCollectorClient` and `StatGuardianClient` are placeholders that return empty/fake data; `DbtManifestParser` genuinely parses a dbt `manifest.json` you already have on disk and is real.
 - **GraphQL API** — not exposed anywhere; the Rust crate has a query-string builder (`src/api/graphql.rs`) that nothing serves or executes.
-- **Chat and incident-management integrations** — the Rust structs (`src/api/integrations.rs`) build correct webhook payloads for chat notifications and incident-management alerting, but never send them (the HTTP calls are commented out), and are not exposed to Python at all yet.
+- **Chat and incident-management integrations** — the Rust structs (`src/api/integrations.rs`) build correct webhook payloads for chat notifications and incident-management alerting, but never send them (the HTTP calls are commented out), and are not exposed to Python at all yet. The Python placeholder clients in `pyblastradius.integrations` raise `NotImplementedError` rather than returning fabricated empty/fake data.
 
 ## Quick Start
 

@@ -15,10 +15,16 @@ class OtelCollectorClient:
         self.protocol = protocol
 
     def discover_dependencies(self, time_window_minutes: int = 60) -> "Graph":
-        """Discover dependencies from traces"""
-        # Placeholder: would connect to OTLP and extract traces
-        from pyblastradius import Graph
-        return Graph()
+        """Discover dependencies from traces.
+
+        Not implemented: no OTLP client is wired into this package yet. Raising
+        is deliberate -- returning an empty Graph would look like a successful
+        discovery that found nothing.
+        """
+        raise NotImplementedError(
+            "OTel trace discovery is not wired into pyblastradius yet. "
+            "Feed a Graph explicitly or use the Rust core."
+        )
 
 
 class StatGuardianClient:
@@ -29,16 +35,24 @@ class StatGuardianClient:
         self.api_key = api_key
 
     def get_quality_rules(self) -> list[dict[str, Any]]:
-        """Get quality rules"""
-        return []
+        """Get quality rules (not implemented)."""
+        raise NotImplementedError(
+            "StatGuardian quality rules are not wired into pyblastradius yet; "
+            "no request is sent and no placeholder rules are fabricated."
+        )
 
     def track_quality_incident(self, incident: dict[str, Any]) -> dict[str, Any]:
-        """Track a quality incident"""
-        return {"incident_id": "sg-001"}
+        """Track a quality incident (not implemented)."""
+        raise NotImplementedError(
+            "StatGuardian incident tracking is not wired into pyblastradius yet; "
+            "no fabricated incident id is returned."
+        )
 
     def get_quality_events(self) -> list[dict[str, Any]]:
-        """Get quality events"""
-        return []
+        """Get quality events (not implemented)."""
+        raise NotImplementedError(
+            "StatGuardian quality events are not wired into pyblastradius yet."
+        )
 
 
 class DbtManifestParser:
