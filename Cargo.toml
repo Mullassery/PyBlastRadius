@@ -44,7 +44,7 @@ toml = "0.8"
 # Real HCL2 parser for Terraform resource discovery (replaces the previous
 # regex-based extraction, which could not correctly handle multi-line
 # blocks, nested blocks, or comments containing lookalike text).
-hcl-rs = "0.18"
+hcl-rs = "0.19"
 
 # Logging & diagnostics
 tracing = "0.1"
