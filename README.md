@@ -535,3 +535,25 @@ Built on proven open-source foundations:
 **Made by Georgi Mammen Mullassery**
 
 [GitHub](https://github.com/Mullassery/PyBlastRadius) · [Documentation](docs/) · [Issues](https://github.com/Mullassery/PyBlastRadius/issues)
+
+## OpenLineage runtime lineage
+
+Static Terraform/Kubernetes graphs miss actual data/task dependencies. Ingest
+OpenLineage events emitted by Airflow, dbt or Spark:
+
+```bash
+pyblastradius scan openlineage://path=lineage.ndjson
+```
+
+```python
+from pyblastradius import OpenLineageDiscoverer
+
+graph = OpenLineageDiscoverer(path="lineage.ndjson").discover()
+```
+
+Each event becomes `input dataset --Feeds--> job --Feeds--> output dataset`.
+Inputs/outputs are `Table` nodes and jobs are `Pipeline` nodes, so existing
+blast-radius/criticality analysis works unchanged. JSON arrays, single JSON
+events and newline-delimited JSON are supported. This is an adapter over the
+Apache-2.0 OpenLineage event schema, not a fork of the OpenLineage project.
+

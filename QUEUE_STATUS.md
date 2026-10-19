@@ -3,7 +3,7 @@
 This file records what was shipped, what is blocked/failed, and what is rejected for this repository. It complements `AUDIT_FINDINGS.md`.
 
 ## Shipped
-- No code changes; audit/bundle docs added.
+- OpenLineage runtime lineage ingestion (`openlineage://` discovery scheme).
 
 ## Blocked / failed
 - Airflow discovery (currently empty); narrow PR-impact workflow.

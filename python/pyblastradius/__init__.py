@@ -101,8 +101,15 @@ from pyblastradius.integrations import (
     OtelCollectorClient,
     StatGuardianClient,
 )
+from pyblastradius.openlineage import (
+    OpenLineageDiscoverer,
+    OpenLineageUnavailable,
+    discover_openlineage,
+    events_to_graph,
+    load_events,
+)
 
-__all__ = [
+__all__ = [  # noqa: RUF022
     "AirflowDiscoverer",
     # Analysis (Python-only, not backed by the Rust engine - see
     # pyblastradius/analysis.py docstrings for current limitations)
@@ -125,6 +132,11 @@ __all__ = [
     "NodeType",
     # Integrations
     "OtelCollectorClient",
+    "OpenLineageDiscoverer",
+    "OpenLineageUnavailable",
+    "discover_openlineage",
+    "events_to_graph",
+    "load_events",
     "OtelDiscoverer",
     "SimulationResult",
     "Simulator",

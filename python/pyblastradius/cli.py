@@ -16,6 +16,7 @@ from . import (
     FailureType,
     Graph,
     KubernetesDiscoverer,
+    OpenLineageDiscoverer,
     OtelDiscoverer,
     Simulator,
     TerraformDiscoverer,
@@ -82,6 +83,11 @@ class UriParser:
                 endpoint=params.get("endpoint", "0.0.0.0:4317"),
                 duration_minutes=int(params.get("duration", "60")),
             )
+        elif scheme == "openlineage":
+            return OpenLineageDiscoverer(
+                path=params.get("path", "."),
+                recursive=params.get("recursive", "true").lower() == "true",
+            )
         elif scheme == "local":
             return LocalDiscoverer(
                 path=params.get("path", "."),
@@ -107,6 +113,7 @@ class LocalDiscoverer(Discoverer):
             ("Kubernetes", KubernetesDiscoverer()),
             ("Terraform", TerraformDiscoverer(path=str(self.path))),
             ("Airflow", AirflowDiscoverer(dag_folder=str(self.path))),
+            ("OpenLineage", OpenLineageDiscoverer(path=str(self.path))),
         ]
 
         for name, discoverer in discoverers:
