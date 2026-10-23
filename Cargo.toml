@@ -68,7 +68,7 @@ opentelemetry-proto = { version = "0.32", features = ["gen-tonic", "trace"], opt
 backtrace = "0.3"
 
 # Utilities
-itertools = "0.12"
+itertools = "0.14"
 dashmap = "5.5"
 once_cell = "1.19"
 uuid = { version = "1.6", features = ["v4", "serde"] }
