@@ -184,6 +184,11 @@ No public API changes.
 - Helm chart for self-hosted deployment
 - Advanced hidden dependency detection (query logs, configuration mining)
 
+## [0.4.4] - 2026-10-23
+
+### Added
+- Added real dbt manifest parsing and wired PagerDuty/Slack webhook integrations.
+
 ## [0.2.0] - 2026-08-05
 
 Real git tag (`v0.2.0`), dated from `git log`. No entry existed for this
