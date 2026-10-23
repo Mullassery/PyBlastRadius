@@ -57,8 +57,13 @@ try:
         Node,
         NodeType,
         OtelDiscoverer,
+        # Real Slack/PagerDuty webhook dispatch (see src/api/integrations.rs).
+        # These perform actual HTTP POSTs with a 10s timeout and raise
+        # RuntimeError on non-2xx responses.
+        PagerDutyIntegration,
         SimulationResult,
         Simulator,
+        SlackIntegration,
         # Real Terraform discovery (hcl-rs parsing + reference-based
         # dependency detection - see src/discovery/terraform.rs). Import
         # this instead of pyblastradius.discovery's TerraformDiscoverer,
@@ -89,6 +94,8 @@ except ImportError:
     KubernetesDiscoverer = None
     OtelDiscoverer = None
     AirflowDiscoverer = None
+    SlackIntegration = None
+    PagerDutyIntegration = None
     available_providers = None
 
 # Python-only exports (analysis helpers not backed by the Rust engine).
@@ -138,8 +145,10 @@ __all__ = [  # noqa: RUF022
     "events_to_graph",
     "load_events",
     "OtelDiscoverer",
+    "PagerDutyIntegration",
     "SimulationResult",
     "Simulator",
+    "SlackIntegration",
     "StatGuardianClient",
     "TerraformDiscoverer",
     "available_providers",

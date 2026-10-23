@@ -1,5 +1,6 @@
-use crate::error::Result;
+use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// StatGuardian integration for data quality tracking
 /// Detects data quality issues that could cascade through pipelines
@@ -29,86 +30,86 @@ impl StatGuardianClient {
         }
     }
 
-    /// Get data quality checks and rules
+    /// StatGuardian's HTTP service exposes contract validation, not a rule
+    /// catalogue. Returning invented rules here would make an unavailable
+    /// integration look healthy.
     pub async fn get_quality_rules(&self) -> Result<Vec<QualityRule>> {
-        // In production: Query StatGuardian API for configured rules
-        let rules = vec![
-            QualityRule {
-                rule_id: "null_check_users".to_string(),
-                table_name: "users".to_string(),
-                column_name: "email".to_string(),
-                rule_type: QualityRuleType::NotNull,
-                threshold: 0.0, // No nulls allowed
-                severity: QualitySeverity::Critical,
-            },
-            QualityRule {
-                rule_id: "freshness_check_events".to_string(),
-                table_name: "events".to_string(),
-                column_name: "created_at".to_string(),
-                rule_type: QualityRuleType::Freshness,
-                threshold: 60.0, // Max 60 min old
-                severity: QualitySeverity::High,
-            },
-            QualityRule {
-                rule_id: "uniqueness_check_orders".to_string(),
-                table_name: "orders".to_string(),
-                column_name: "order_id".to_string(),
-                rule_type: QualityRuleType::Uniqueness,
-                threshold: 1.0, // 100% unique
-                severity: QualitySeverity::Critical,
-            },
-        ];
-
-        Ok(rules)
+        Err(Error::AnalysisError(
+            "StatGuardian does not expose a quality-rule listing API; call validate_attributes() with a contract-bound /validate service"
+                .to_string(),
+        ))
     }
 
-    /// Check data quality status for specific table
-    pub async fn check_table_quality(&self, table_name: &str) -> Result<DataQualityCheck> {
-        let checks = [DataQualityCheck {
-            check_id: format!("check_{}_001", table_name),
-            table_name: table_name.to_string(),
-            check_type: QualityRuleType::NotNull,
-            status: QualityStatus::Pass,
-            last_run: chrono::Utc::now(),
-            failed_rows: 0,
-            failure_rate: 0.0,
-        }];
-
-        Ok(checks[0].clone())
+    /// Validate one entity's attributes against the contract bound to the
+    /// StatGuardian `/validate` service.
+    ///
+    /// This is the real HTTP integration. It sends
+    /// `{"entity": {"attributes": ...}}` and returns the service's
+    /// `passed`/`quality_score`/`issues`/`schema_version` response.
+    #[cfg(feature = "http-discovery")]
+    pub async fn validate_attributes(&self, attributes: Value) -> Result<ValidationResponse> {
+        let url = format!("{}/validate", self.api_endpoint.trim_end_matches('/'));
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|error| Error::HttpError(format!("client init failed: {error}")))?;
+        let mut request = client
+            .post(&url)
+            .json(&serde_json::json!({ "entity": { "attributes": attributes } }));
+        if !self.api_key.trim().is_empty() {
+            request = request.bearer_auth(self.api_key.trim());
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|error| Error::HttpError(format!("request to {url} failed: {error}")))?;
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(Error::HttpError(format!(
+                "StatGuardian returned {status}: {body}"
+            )));
+        }
+        serde_json::from_str(&body).map_err(Error::from)
     }
 
-    /// Get column-level lineage from data warehouse
-    /// Returns which columns feed into other tables
+    /// Without the `http-discovery` feature there is no HTTP client linked in.
+    #[cfg(not(feature = "http-discovery"))]
+    pub async fn validate_attributes(&self, _attributes: Value) -> Result<ValidationResponse> {
+        Err(Error::ConfigError(
+            "PyBlastRadius was built without the `http-discovery` feature; rebuild with --features http-discovery to call StatGuardian"
+                .to_string(),
+        ))
+    }
+
+    /// A table name alone is not enough to run a contract-bound validation.
+    /// Callers should use [`Self::validate_attributes`] with real column
+    /// values instead of receiving a fabricated PASS.
+    pub async fn check_table_quality(&self, _table_name: &str) -> Result<DataQualityCheck> {
+        Err(Error::AnalysisError(
+            "check_table_quality needs row attributes; use validate_attributes() so StatGuardian can evaluate the bound contract"
+                .to_string(),
+        ))
+    }
+
+    /// Column-level lineage is a warehouse metadata query. StatGuardian's
+    /// HTTP service does not expose it, and this client has no warehouse
+    /// connection configured, so no lineage is fabricated.
     pub async fn get_column_lineage(&self, _table_name: &str) -> Result<Vec<ColumnLineageEdge>> {
-        // In production: Query data warehouse for column-level lineage
-        let lineage = vec![
-            ColumnLineageEdge {
-                source_table: "raw_orders".to_string(),
-                source_column: "user_id".to_string(),
-                target_table: "fact_orders".to_string(),
-                target_column: "customer_id".to_string(),
-                transformation: Some("CAST(user_id AS INT)".to_string()),
-                affected_metrics: vec!["revenue".to_string(), "order_count".to_string()],
-            },
-            ColumnLineageEdge {
-                source_table: "fact_orders".to_string(),
-                source_column: "revenue".to_string(),
-                target_table: "dashboards.sales_dashboard".to_string(),
-                target_column: "total_revenue".to_string(),
-                transformation: Some("SUM(revenue)".to_string()),
-                affected_metrics: vec!["executive_kpi".to_string()],
-            },
-        ];
-
-        Ok(lineage)
+        Err(Error::AnalysisError(
+            "column lineage is not exposed by StatGuardian's /validate service; provide lineage from the warehouse metadata API"
+                .to_string(),
+        ))
     }
 
-    /// Track data quality issues and their impact on downstream systems
+    /// Track data quality issues and their impact on downstream systems.
+    ///
+    /// Impact is computed from real lineage. Without a lineage source this
+    /// returns an explicit error instead of inventing affected tables.
     pub async fn track_quality_incident(
         &self,
         incident: QualityIncident,
     ) -> Result<IncidentImpact> {
-        // Find all downstream tables affected by this quality issue
         let column_lineage = self.get_column_lineage(&incident.table_name).await?;
 
         let affected_tables: Vec<String> = column_lineage
@@ -139,6 +140,16 @@ impl StatGuardianClient {
             QualitySeverity::Low => 72,     // 3 days
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationResponse {
+    pub passed: bool,
+    pub quality_score: f32,
+    #[serde(default)]
+    pub issues: Vec<String>,
+    #[serde(default)]
+    pub schema_version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -222,6 +233,7 @@ pub struct IncidentImpact {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn test_statguardian_client() {
@@ -235,35 +247,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_quality_rules() {
+    async fn test_get_quality_rules_is_explicitly_unavailable() {
         let client = StatGuardianClient::new(
             "https://statguardian.example.com".to_string(),
             "api_key_123".to_string(),
             DataWarehouse::BigQuery,
         );
 
-        let rules = client.get_quality_rules().await.unwrap();
-        assert!(!rules.is_empty());
-        assert!(rules
-            .iter()
-            .any(|r| r.severity == QualitySeverity::Critical));
+        let error = client.get_quality_rules().await.unwrap_err();
+        assert!(matches!(error, Error::AnalysisError(_)));
     }
 
     #[tokio::test]
-    async fn test_column_lineage() {
+    async fn test_column_lineage_is_explicitly_unavailable() {
         let client = StatGuardianClient::new(
             "https://statguardian.example.com".to_string(),
             "api_key_123".to_string(),
             DataWarehouse::Databricks,
         );
 
-        let lineage = client.get_column_lineage("orders").await.unwrap();
-        assert!(!lineage.is_empty());
-        assert!(!lineage[0].affected_metrics.is_empty());
+        let error = client.get_column_lineage("orders").await.unwrap_err();
+        assert!(matches!(error, Error::AnalysisError(_)));
     }
 
     #[tokio::test]
-    async fn test_quality_incident_impact() {
+    async fn test_quality_incident_impact_requires_real_lineage() {
         let client = StatGuardianClient::new(
             "https://statguardian.example.com".to_string(),
             "api_key_123".to_string(),
@@ -279,8 +287,63 @@ mod tests {
             detected_at: chrono::Utc::now(),
         };
 
-        let impact = client.track_quality_incident(incident).await.unwrap();
-        assert!(!impact.affected_downstream_tables.is_empty());
-        assert_eq!(impact.estimated_recovery_hours, 4); // Critical
+        let error = client.track_quality_incident(incident).await.unwrap_err();
+        assert!(matches!(error, Error::AnalysisError(_)));
+    }
+
+    #[cfg(feature = "http-discovery")]
+    #[tokio::test]
+    async fn test_validate_attributes_uses_real_http_endpoint() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/validate")
+            .match_header("authorization", "Bearer secret")
+            .match_body(mockito::Matcher::Json(json!({
+                "entity": {"attributes": {"amount": 10}}
+            })))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"passed":true,"quality_score":1.0,"issues":[],"schema_version":"orders.sg"}"#,
+            )
+            .create_async()
+            .await;
+
+        let client = StatGuardianClient::new(
+            server.url(),
+            "secret".to_string(),
+            DataWarehouse::PostgreSQL,
+        );
+        let result = client
+            .validate_attributes(json!({"amount": 10}))
+            .await
+            .unwrap();
+
+        assert!(result.passed);
+        assert_eq!(result.quality_score, 1.0);
+        assert_eq!(result.schema_version, "orders.sg");
+        mock.assert_async().await;
+    }
+
+    #[cfg(feature = "http-discovery")]
+    #[tokio::test]
+    async fn test_validate_attributes_surfaces_http_errors() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/validate")
+            .with_status(503)
+            .with_body("no contract configured")
+            .create_async()
+            .await;
+
+        let client =
+            StatGuardianClient::new(server.url(), String::new(), DataWarehouse::PostgreSQL);
+        let error = client
+            .validate_attributes(json!({"amount": 10}))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, Error::HttpError(_)));
+        mock.assert_async().await;
     }
 }

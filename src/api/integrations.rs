@@ -15,12 +15,15 @@ async fn post_json(
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| crate::error::Error::HttpError(format!("client init failed: {e}")))?;
-    let response = client
-        .post(url)
-        .json(payload)
-        .send()
-        .await
-        .map_err(|e| crate::error::Error::HttpError(format!("request failed: {e}")))?;
+    let response = client.post(url).json(payload).send().await.map_err(|e| {
+        let mut message = format!("request failed: {e}");
+        let mut source = std::error::Error::source(&e);
+        while let Some(cause) = source {
+            message.push_str(&format!(": {cause}"));
+            source = cause.source();
+        }
+        crate::error::Error::HttpError(message)
+    })?;
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
     if !status.is_success() {

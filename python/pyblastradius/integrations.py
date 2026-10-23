@@ -3,6 +3,16 @@
 import json
 from typing import TYPE_CHECKING, Any
 
+# Real Slack/PagerDuty webhook clients from the Rust extension. They perform
+# actual HTTP POSTs (10s timeout) and raise RuntimeError on non-2xx responses;
+# they are re-exported here for discoverability alongside the Python-only
+# integration helpers below.
+try:
+    from pyblastradius._core import PagerDutyIntegration, SlackIntegration
+except ImportError:  # pragma: no cover - extension module not built
+    PagerDutyIntegration = None
+    SlackIntegration = None
+
 if TYPE_CHECKING:
     from pyblastradius import Graph
 
@@ -86,5 +96,7 @@ class DbtManifestParser:
 __all__ = [
     "DbtManifestParser",
     "OtelCollectorClient",
+    "PagerDutyIntegration",
+    "SlackIntegration",
     "StatGuardianClient",
 ]
