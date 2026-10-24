@@ -123,6 +123,9 @@ check_untyped_defs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
 
+[tool.coverage.report]
+fail_under = 70
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]

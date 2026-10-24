@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- End-to-end REST API workflow test covering scan, graph load, analyze,
+- End-to-end REST API workflow tests covering scan, graph load, analyze,
   analysis lookup, criticality, and OpenAPI endpoints.
+- Enforced a 70% Python coverage floor (verified baseline: 74%).
 
 ## [0.4.3] - 2026-10-18
 
