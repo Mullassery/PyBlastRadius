@@ -40,7 +40,7 @@ Disclosed here rather than left implicit, per this project's honesty policy:
   during this same pass found no known vulnerabilities in the resolved
   Python dependency set, but that was a one-time check, not continuous.
 - **`Cargo.lock`**: now committed (previously gitignored — see
-  `ROADMAP_HONEST.md`), so `cargo audit` and builds are reproducible against
+  `docs/internal/ROADMAP_HONEST.md`), so `cargo audit` and builds are reproducible against
   a known dependency set rather than whatever happened to resolve locally.
 - The chat/incident-management webhook code in `src/api/integrations.rs`
   does not send any HTTP requests today (calls are commented out) — there

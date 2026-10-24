@@ -1,7 +1,5 @@
 # PyBlastRadius
 
-[![Graphify](https://img.shields.io/badge/Graphify-knowledge%20graph-blue)](https://github.com/Graphify-Labs/graphify)
-
 ![PyPI](https://img.shields.io/pypi/v/pyblastradius)
 [![CI](https://github.com/Mullassery/PyBlastRadius/actions/workflows/ci.yml/badge.svg)](https://github.com/Mullassery/PyBlastRadius/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
@@ -215,7 +213,7 @@ data today (see Features above for the exact status of each piece).
   old `docs/ARCHITECTURE.md` described a Rust-only CLI binary that no longer
   exists; also archived)
 - **[Contributing](CONTRIBUTING.md)** — Development setup and guidelines
-- **[ROADMAP_HONEST.md](ROADMAP_HONEST.md)** — concrete, bucketed status of
+- **[docs/internal/ROADMAP_HONEST.md](docs/internal/ROADMAP_HONEST.md)** — concrete, bucketed status of
   what's tested, untested, broken, and not built
 
 ## Why PyBlastRadius?
@@ -348,7 +346,7 @@ run) rather than a rigorous end-to-end benchmark.
 
 No issues are currently open in the GitHub tracker. The gaps below are the ones found by
 reading the source directly; the Features, Platform Support, API Examples, and Integrations
-sections above give the full detail on each. **See [ROADMAP_HONEST.md](ROADMAP_HONEST.md)
+sections above give the full detail on each. **See [docs/internal/ROADMAP_HONEST.md](docs/internal/ROADMAP_HONEST.md)
 for the complete, bucketed list (built-and-tested / built-not-tested / CI-broken / not-built)
 with file:line specifics** — this section is a summary, not the full picture:
 
@@ -408,7 +406,7 @@ was missing `httpx`, which `fastapi.testclient.TestClient` needs transitively �
 code under test; added. Added a `cargo audit` job to CI (could not run locally — this sandbox
 blocks outbound access to github.com, which is where `cargo-audit` fetches its advisory
 database from — so its actual result is unverified pending the next CI run). See
-[ROADMAP_HONEST.md](ROADMAP_HONEST.md) for the full list including issues found but not fixed.
+[docs/internal/ROADMAP_HONEST.md](docs/internal/ROADMAP_HONEST.md) for the full list including issues found but not fixed.
 
 **Fixed as of an earlier pass**: CI's `Clippy` job (`cargo clippy -- -D warnings`) had been failing
 on 14 `doc_lazy_continuation` errors — not in Rust code, but in this README itself (embedded
@@ -430,7 +428,7 @@ than trusting either this note or the badge at the top of this file in isolation
 **Rejected / deferred:**
 - Service-catalog/incident-management parity.
 
-Full shipped/blocked/rejected detail: [`QUEUE_STATUS.md`](QUEUE_STATUS.md).
+Full shipped/blocked/rejected detail: [`docs/internal/QUEUE_STATUS.md`](docs/internal/QUEUE_STATUS.md).
 
 ## Contributing
 
@@ -453,7 +451,7 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 - **Documentation**: [docs/](docs/) (see [Quick Start](#quick-start) and
   [Architecture](#architecture) above for the current, accurate versions)
-- **Roadmap / honest status**: [ROADMAP_HONEST.md](ROADMAP_HONEST.md)
+- **Roadmap / honest status**: [docs/internal/ROADMAP_HONEST.md](docs/internal/ROADMAP_HONEST.md)
 - **Issues**: [GitHub Issues](https://github.com/Mullassery/PyBlastRadius/issues)
 - **Security**: [SECURITY.md](SECURITY.md)
 - **Email**: mullassery@gmail.com
