@@ -116,3 +116,89 @@ def test_simulate_command_unknown_scenario_fails_cleanly(tmp_path):
     )
     assert result.exit_code != 0
     assert "bogus-scenario" in result.output
+
+
+def test_visualize_writes_interactive_html(tmp_path):
+    graph_file = tmp_path / "graph.json"
+    _write_sample_graph(graph_file)
+    output = tmp_path / "graph.html"
+
+    result = CliRunner().invoke(
+        cli, ["visualize", str(graph_file), "--output", str(output)]
+    )
+
+    assert result.exit_code == 0, result.output
+    html = output.read_text()
+    assert "<!DOCTYPE html>" in html
+    assert "api-server" in html
+    assert "auth-service" in html
+
+
+def test_visualize_writes_dot_and_json(tmp_path):
+    graph_file = tmp_path / "graph.json"
+    _write_sample_graph(graph_file)
+
+    dot_out = tmp_path / "graph.dot"
+    json_out = tmp_path / "graph-out.json"
+    runner = CliRunner()
+
+    dot_result = runner.invoke(
+        cli, ["visualize", str(graph_file), "--format", "dot", "--output", str(dot_out)]
+    )
+    assert dot_result.exit_code == 0, dot_result.output
+    assert "digraph" in dot_out.read_text().lower()
+
+    json_result = runner.invoke(
+        cli, ["visualize", str(graph_file), "--format", "json", "--output", str(json_out)]
+    )
+    assert json_result.exit_code == 0, json_result.output
+    assert json.loads(json_out.read_text())["nodes"]
+
+
+def test_scan_local_source_writes_graph(tmp_path):
+    source = tmp_path / "infra"
+    source.mkdir()
+    (source / "main.tf").write_text(
+        'resource "aws_instance" "api" {\n  ami = "ami-123"\n}\n'
+    )
+    output = tmp_path / "blast-radius.json"
+
+    result = CliRunner().invoke(
+        cli, ["scan", f"local://path={source}", "--output", str(output)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert output.exists()
+    assert "Discovery complete" in result.output
+
+
+def test_scan_rejects_unknown_scheme_without_crashing(tmp_path):
+    output = tmp_path / "graph.json"
+    result = CliRunner().invoke(
+        cli, ["scan", "not-a-uri", "--output", str(output)]
+    )
+    # The command reports the bad source and still writes an (empty) graph.
+    assert result.exit_code == 0, result.output
+    assert output.exists()
+    assert "not-a-uri" in result.output
+
+
+def test_server_command_starts_and_reports_bind(monkeypatch):
+    import importlib
+
+    monkeypatch.setenv("PYBLASTRADIUS_API_KEY", "test-key")
+    import pyblastradius.server as server_module
+
+    importlib.reload(server_module)
+    called = {}
+
+    def fake_run(host, port):
+        called["host"] = host
+        called["port"] = port
+
+    monkeypatch.setattr(server_module, "run_server", fake_run)
+    result = CliRunner().invoke(cli, ["server", "--host", "0.0.0.0", "--port", "9999"])
+
+    assert result.exit_code == 0, result.output
+    assert called == {"host": "0.0.0.0", "port": 9999}
+    assert "Listening on 0.0.0.0:9999" in result.output

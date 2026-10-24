@@ -165,11 +165,10 @@ documentation-first pass:
 - ~~**`python/pyblastradius/config.py` (257 lines) has zero test coverage.**~~
   **Fixed:** `tests/test_config.py` covers file loading, env-var expansion,
   validation, CLI merging, and round-tripping; coverage is ~82%.
-- **`python/pyblastradius/cli.py` — 44% coverage** (135/239 lines missed
-  per `pytest --cov` run 2026-09-19), including large blocks at
-  lines 34-47, 52-79, 91-111, 126-166, 211-231, 267-283, 344-368. The CLI
-  is the primary documented user interface; more than half its lines are
-  unexercised by the test suite.
+- ~~**`python/pyblastradius/cli.py` — 44% coverage.**~~ **Improved:** added
+  end-to-end CLI tests for `scan`, `visualize` (HTML/dot/JSON), and `server`,
+  raising CLI coverage to ~73%. Remaining misses are mostly error branches
+  and discovery-scheme combinations.
 - ~~Real, tested Rust-level Kubernetes and OTLP parsing code
   (`src/discovery/kubernetes.rs`, `src/discovery/otlp.rs`) is sitting
   completely unreachable from Python~~ **Fixed 2026-10-05**: added
