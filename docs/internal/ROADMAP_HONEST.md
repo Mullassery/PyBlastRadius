@@ -162,11 +162,9 @@ not left as open debt):
 Left as open debt — needs a dedicated follow-up session, not fixed in this
 documentation-first pass:
 
-- **`python/pyblastradius/config.py` (257 lines) has zero test coverage.**
-  No test in `tests/` imports or exercises it at all
-  (`grep -rn "config" tests/` finds nothing), despite `blastradius.yml`
-  config-file support being an advertised, README-documented feature. This
-  is the single largest test-coverage gap in the Python layer.
+- ~~**`python/pyblastradius/config.py` (257 lines) has zero test coverage.**~~
+  **Fixed:** `tests/test_config.py` covers file loading, env-var expansion,
+  validation, CLI merging, and round-tripping; coverage is ~82%.
 - **`python/pyblastradius/cli.py` — 44% coverage** (135/239 lines missed
   per `pytest --cov` run 2026-09-19), including large blocks at
   lines 34-47, 52-79, 91-111, 126-166, 211-231, 267-283, 344-368. The CLI
