@@ -161,3 +161,56 @@ for middleware in server.app.user_middleware:
     origins = json.loads(out.strip())
     assert origins == ["https://app.example.com", "https://ops.example.com"]
     assert "*" not in origins
+
+
+def test_core_api_workflow_scan_load_analyze_criticality_openapi():
+    script = """
+import json
+from fastapi.testclient import TestClient
+import pyblastradius as pbr
+import pyblastradius.server as server
+
+client = TestClient(server.app)
+headers = {"Authorization": "Bearer test-key-123"}
+
+openapi = client.get("/api/v1/openapi.json", headers=headers)
+assert openapi.status_code == 200, openapi.text
+assert "/api/v1/scan" in openapi.json()["paths"]
+
+scan = client.post("/api/v1/scan", headers=headers, json={"sources": []})
+assert scan.status_code == 200, scan.text
+assert scan.json()["nodes_count"] == 0
+
+graph = pbr.Graph()
+api = pbr.Node("api", pbr.NodeType.Service)
+db = pbr.Node("db", pbr.NodeType.Database)
+api_id = graph.add_node(api)
+db_id = graph.add_node(db)
+graph.add_edge(pbr.Edge(pbr.EdgeType.Calls, api_id, db_id))
+
+loaded = client.post("/api/v1/graphs/load", headers=headers, json=json.loads(graph.to_json()))
+assert loaded.status_code == 200, loaded.text
+assert loaded.json()["nodes"] == 2
+
+listed = client.get("/api/v1/graphs", headers=headers)
+assert listed.status_code == 200, listed.text
+assert listed.json()["current"]["nodes"] == 2
+
+analyzed = client.post("/api/v1/analyze", headers=headers, json={"service": "api"})
+assert analyzed.status_code == 200, analyzed.text
+analysis_id = analyzed.json()["id"]
+fetched = client.get(f"/api/v1/analyses/{analysis_id}", headers=headers)
+assert fetched.status_code == 200, fetched.text
+assert fetched.json()["result"]["service"] == "api"
+
+missing = client.get("/api/v1/analyses/does-not-exist", headers=headers)
+assert missing.status_code == 404
+
+criticality = client.post("/api/v1/criticality", headers=headers, json={"limit": 5})
+assert criticality.status_code == 200, criticality.text
+assert criticality.json()["count"] == 2
+print("OK")
+"""
+    rc, out, err = _run({"PYBLASTRADIUS_API_KEY": "test-key-123"}, script)
+    assert rc == 0, err
+    assert "OK" in out
