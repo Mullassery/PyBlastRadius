@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check `ROADMAP_HONEST.md` first — your idea may already be listed
+        Check `docs/internal/ROADMAP_HONEST.md` first — your idea may already be listed
         as a known gap (e.g. Kubernetes/Airflow discovery, a served GraphQL
         endpoint, sending the already-built chat/incident-management
         webhook payloads).

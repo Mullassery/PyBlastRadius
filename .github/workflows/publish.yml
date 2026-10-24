@@ -137,7 +137,7 @@ jobs:
 
             - [README](https://github.com/Mullassery/PyBlastRadius#readme) (Quick Start, Architecture, current status)
             - [Contributing](https://github.com/Mullassery/PyBlastRadius/blob/main/CONTRIBUTING.md)
-            - [Honest roadmap / known gaps](https://github.com/Mullassery/PyBlastRadius/blob/main/ROADMAP_HONEST.md)
+            - [Honest roadmap / known gaps](https://github.com/Mullassery/PyBlastRadius/blob/main/docs/internal/ROADMAP_HONEST.md)
 
             ## Support
 

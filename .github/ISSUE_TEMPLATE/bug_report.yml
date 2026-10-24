@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Before filing: check README.md's "Known Issues" and
-        `ROADMAP_HONEST.md` — several discovery engines (Kubernetes,
+        `docs/internal/ROADMAP_HONEST.md` — several discovery engines (Kubernetes,
         Airflow, OpenTelemetry) and integrations are documented as
         not-yet-implemented, not bugs.
 
