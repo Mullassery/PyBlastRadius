@@ -56,6 +56,8 @@ starts, and record the decision in the PR or changelog.
 
 ## OSS gap analysis — 2026-10-24
 
+**What matters most here:** calibration against observed failures. A static BFS with critical-only edges overstates precision; record chaos-run impact and compare predictions to ground truth, then add weighted propagation and uncertainty.
+
 Scope: PyBlastRadius assessed against four maintained projects on dependency and lineage discovery, blast-radius modeling, cascade simulation, fault injection, service ownership, API/UI, and CI integration. Chaos tools are included as the empirical counterpoint to a predictive graph, not as feature-parity targets.
 
 ### Comparable OSS projects
