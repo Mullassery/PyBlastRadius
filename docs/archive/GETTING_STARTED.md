@@ -597,8 +597,8 @@ See [INTEGRATION_DATADOG.md](./INTEGRATION_DATADOG.md) for complete example (RES
 
 ## Support & Feedback
 
-- **Issues**: [GitHub Issues](https://github.com/Mullassery/PyBlastRadius/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/Mullassery/PyBlastRadius/discussions)
+- **Issues**: [GitHub Issues](../PyBlastRadius/issues)
+- **Discussions**: [GitHub Discussions](../PyBlastRadius/discussions)
 - **Email**: mullassery@gmail.com
 
 ---

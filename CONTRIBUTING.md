@@ -18,7 +18,7 @@ Thank you for your interest in contributing! This document provides guidelines a
 ### Clone & Build
 
 ```bash
-git clone https://github.com/Mullassery/PyBlastRadius.git
+git clone ../PyBlastRadius
 cd PyBlastRadius
 
 # Build in dev mode
@@ -372,7 +372,7 @@ fn test_myservice_discovery() {
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/Mullassery/PyBlastRadius/issues).
+Use [GitHub Issues](../PyBlastRadius/issues).
 
 **Bug Report**:
 ```markdown
@@ -463,7 +463,7 @@ Be respectful and inclusive. All contributors are expected to follow the [Rust C
 ## Getting Help
 
 - **Documentation**: Check [docs/](docs/)
-- **Discussions**: [GitHub Discussions](https://github.com/Mullassery/PyBlastRadius/discussions)
+- **Discussions**: [GitHub Discussions](../PyBlastRadius/discussions)
 - **Email**: mullassery@gmail.com
 
 ---

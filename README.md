@@ -1,14 +1,14 @@
 # PyBlastRadius
 
 ![PyPI](https://img.shields.io/pypi/v/pyblastradius)
-[![CI](https://github.com/Mullassery/PyBlastRadius/actions/workflows/ci.yml/badge.svg)](https://github.com/Mullassery/PyBlastRadius/actions/workflows/ci.yml)
+[![CI](../PyBlastRadius/actions/workflows/ci.yml/badge.svg)](../PyBlastRadius/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
 ![Rust](https://img.shields.io/badge/rust-1.70+-orange)
 
 **Operational Blast Radius Intelligence Platform** — Predict cascading failures and quantify business impact across infrastructure, data pipelines, and AI systems.
 
-> **Not to be confused with [PyDBTGuard](https://github.com/Mullassery/PyDBTGuard), [PyBeamGuard](https://github.com/Mullassery/PyBeamGuard), or [PyAirflowTester](https://github.com/Mullassery/PyAirflowTester):** those validate a single pipeline technology; PyBlastRadius simulates cascading-failure blast radius across infrastructure, data pipelines, and AI systems.
+> **Not to be confused with [PyDBTGuard](../PyDBTGuard), [PyBeamGuard](../PyBeamGuard), or [PyAirflowTester](../PyAirflowTester):** those validate a single pipeline technology; PyBlastRadius simulates cascading-failure blast radius across infrastructure, data pipelines, and AI systems.
 
 ## Which project do I need?
 
@@ -16,20 +16,20 @@ Part of the Mullassery open-source family. These tools have similar names — he
 
 | If you need to… | Use |
 | --- | --- |
-| Build a repository's dependency graph and match it against vulnerability advisories (Python, Rust, Node, containers) | [PyDeepMesh](https://github.com/Mullassery/PyDeepMesh) |
-| Understand *why* a Python dependency exists, who added it, and whether it is actually used | [PyDependencyCheck](https://github.com/Mullassery/PyDependencyCheck) |
-| Statically analyze a **dbt** project (risky tests, test blast radius, cost) | [PyDBTGuard](https://github.com/Mullassery/PyDBTGuard) |
-| Statically analyze **Apache Beam / Dataflow** pipelines (cost, hot keys, reliability) | [PyBeamGuard](https://github.com/Mullassery/PyBeamGuard) |
-| Validate **Airflow** DAGs and dbt runs | [PyAirflowTester](https://github.com/Mullassery/PyAirflowTester) |
-| Simulate cascading-failure **blast radius** across infrastructure, data pipelines, and AI systems | [PyBlastRadius](https://github.com/Mullassery/PyBlastRadius) |
-| Check the **quality of the data itself** at runtime (schema, drift, anomalies) | [StatGuardian](https://github.com/Mullassery/StatGuardian) |
-| Discover **devices, services, and vulnerabilities on a network** | [PyNetworkIntel](https://github.com/Mullassery/PyNetworkIntel) |
-| Discover and score **API security** risk (real traffic, agent/MCP, Cedar policy) | [PyAPICheck](https://github.com/Mullassery/PyAPICheck) |
-| Trace and root-cause **AI agent** failures | [PyAgentHound](https://github.com/Mullassery/PyAgentHound) |
-| Diagnose **RAG retrieval** failures | [PyVectorHound](https://github.com/Mullassery/PyVectorHound) |
-| Orchestrate **local, dependency-aware tasks** (DAG scheduler + content-addressed cache) | [PyTaskWireCheck](https://github.com/Mullassery/PyTaskWireCheck) |
+| Build a repository's dependency graph and match it against vulnerability advisories (Python, Rust, Node, containers) | [PyDeepMesh](../PyDeepMesh) |
+| Understand *why* a Python dependency exists, who added it, and whether it is actually used | [PyDependencyCheck](../PyDependencyCheck) |
+| Statically analyze a **dbt** project (risky tests, test blast radius, cost) | [PyDBTGuard](../PyDBTGuard) |
+| Statically analyze **Apache Beam / Dataflow** pipelines (cost, hot keys, reliability) | [PyBeamGuard](../PyBeamGuard) |
+| Validate **Airflow** DAGs and dbt runs | [PyAirflowTester](../PyAirflowTester) |
+| Simulate cascading-failure **blast radius** across infrastructure, data pipelines, and AI systems | [PyBlastRadius](../PyBlastRadius) |
+| Check the **quality of the data itself** at runtime (schema, drift, anomalies) | [StatGuardian](../StatGuardian) |
+| Discover **devices, services, and vulnerabilities on a network** | [PyNetworkIntel](../PyNetworkIntel) |
+| Discover and score **API security** risk (real traffic, agent/MCP, Cedar policy) | [PyAPICheck](../PyAPICheck) |
+| Trace and root-cause **AI agent** failures | [PyAgentHound](../PyAgentHound) |
+| Diagnose **RAG retrieval** failures | [PyVectorHound](../PyVectorHound) |
+| Orchestrate **local, dependency-aware tasks** (DAG scheduler + content-addressed cache) | [PyTaskWireCheck](../PyTaskWireCheck) |
 
-[Browse all projects →](https://github.com/Mullassery?tab=repositories)
+[Browse all projects →](../Mullassery-profile)
 
 ## Features
 
@@ -417,7 +417,7 @@ chars). Re-indented to 2 spaces; verified with the exact CI command (`cargo clip
 -D warnings`), clean. The `Format`/`Coverage`/`Build`/`Test` jobs were already green — this
 was the only failing job, not the Rust-internal test-expectation issue an earlier revision of
 this note described (that issue is not currently reproducing; if it resurfaces, check the
-[Actions tab](https://github.com/Mullassery/PyBlastRadius/actions) for current status rather
+[Actions tab](../PyBlastRadius/actions) for current status rather
 than trusting either this note or the badge at the top of this file in isolation).
 
 ## Known issues and deferred work
@@ -452,7 +452,7 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 - **Documentation**: [docs/](docs/) (see [Quick Start](#quick-start) and
   [Architecture](#architecture) above for the current, accurate versions)
 - **Roadmap / honest status**: [docs/internal/ROADMAP_HONEST.md](docs/internal/ROADMAP_HONEST.md)
-- **Issues**: [GitHub Issues](https://github.com/Mullassery/PyBlastRadius/issues)
+- **Issues**: [GitHub Issues](../PyBlastRadius/issues)
 - **Security**: [SECURITY.md](SECURITY.md)
 - **Email**: mullassery@gmail.com
 
@@ -532,7 +532,7 @@ Built on proven open-source foundations:
 
 **Made by Georgi Mammen Mullassery**
 
-[GitHub](https://github.com/Mullassery/PyBlastRadius) · [Documentation](docs/) · [Issues](https://github.com/Mullassery/PyBlastRadius/issues)
+[GitHub](../PyBlastRadius) · [Documentation](docs/) · [Issues](../PyBlastRadius/issues)
 
 ## OpenLineage runtime lineage
 

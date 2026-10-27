@@ -260,8 +260,8 @@ When preparing a new release:
 
 ## Links
 
-- [Documentation](https://github.com/Mullassery/PyBlastRadius/blob/main/docs/)
-- [GitHub Issues](https://github.com/Mullassery/PyBlastRadius/issues)
+- [Documentation](../PyBlastRadius/blob/main/docs/)
+- [GitHub Issues](../PyBlastRadius/issues)
 - [PyPI Package](https://pypi.org/project/pyblastradius/)
 
 ---

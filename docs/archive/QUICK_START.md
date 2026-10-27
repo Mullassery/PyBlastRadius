@@ -18,7 +18,7 @@ Get started with PyBlastRadius in 5 minutes.
 ### From Source (Development)
 
 ```bash
-git clone https://github.com/Mullassery/PyBlastRadius.git
+git clone ../PyBlastRadius
 cd PyBlastRadius
 
 # Build the CLI
@@ -485,7 +485,7 @@ pyblastradius scan --kubernetes $KUBECONFIG
 ## Getting Help
 
 - **Documentation**: [docs/](../)
-- **Issues**: [GitHub Issues](https://github.com/Mullassery/PyBlastRadius/issues)
+- **Issues**: [GitHub Issues](../PyBlastRadius/issues)
 - **Email**: mullassery@gmail.com
 
 ---
